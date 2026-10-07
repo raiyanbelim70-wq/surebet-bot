@@ -1,18 +1,40 @@
-
 import os
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 import requests
 from flask import Flask
 
 app = Flask(__name__)
 
 # Telegram Credentials
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TOKEN = "8001955184:AAFJ4NbmFHwVhpWB9LETM_K1ESdRWS8YDd8"
+CHAT_ID = "5292908963"
 
+# The Odds API Key (Render environment variables se aayegi)
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
 
+# Aapke pasandida bookmakers ki mapping
+ALLOWED_BOOKMAKERS = {
+    "pinnacle": {"name": "Pinnacle", "domain": "pinnacle.com"},
+    "onexbet": {"name": "1xBet", "domain": "1xbet.com"},
+    "dafabet": {"name": "Dafabet", "domain": "dafabet.com"},
+    "mostbet": {"name": "Mostbet", "domain": "mostbet.com"},
+    "stake": {"name": "Stake", "domain": "stake.com"},
+    "parimatch": {"name": "Parimatch", "domain": "parimatch.com"},
+    "melbet": {"name": "Melbet", "domain": "melbet.com"}
+}
+
+# Scan karne ke liye alag-alag sports ki list (The Odds API keys)
+SPORTS_TO_SCAN = [
+    {"key": "soccer_epl", "name": "Football", "league": "English Premier League"},
+    {"key": "soccer_spain_la_liga", "name": "Football", "league": "Spain. La Liga"},
+    {"key": "cricket_ipl", "name": "Cricket", "league": "Indian Premier League"},
+    {"key": "cricket_international_t20", "name": "Cricket", "league": "International T20"},
+    {"key": "tennis_atp_aus_open", "name": "Tennis", "league": "ATP Masters"},
+    {"key": "basketball_nba", "name": "Basketball", "league": "NBA"},
+    {"key": "icehockey_nhl", "name": "Ice Hockey", "league": "NHL"}
+]
 
 # Duplicate alerts ko rokne ke liye set
 sent_alerts = set()
@@ -30,132 +52,83 @@ def send_telegram_alert(message):
     except Exception as e:
         print(f"Telegram Error: {e}")
 
-def get_matches():
-    today = datetime.now()
-    today_str = today.strftime("%d %b")
-    
-    # Sabhi major sports ke matches aur unke bookmakers ka automatic setup
-    matches = [
-        {
-            "id": "match_football_01",
-            "match_status": "🟢 PRE-MATCH",
-            "match": "Real Madrid - Barcelona",
-            "sport": "Football",
-            "league": "Spain. La Liga",
-            "start_time": f"{today_str} 21:00 UTC",
-            "market_type": "1X2 Match Winner",
-            "bookmakers": {
-                "Pinnacle": {"odds": 2.10, "bet": "Home (1)", "link": "https://www.pinnacle.com"},
-                "1xBet": {"odds": 2.15, "bet": "Away (2)", "link": "https://1xbet.com"},
-                "Dafabet": {"odds": 2.08, "bet": "Home (1)", "link": "https://dafabet.com"},
-                "Mostbet": {"odds": 2.12, "bet": "Away (2)", "link": "https://mostbet.com"}
-            }
-        },
-        {
-            "id": "match_tennis_02",
-            "match_status": "🔴 LIVE MATCH",
-            "match": "Novak Djokovic - Carlos Alcaraz",
-            "sport": "Tennis",
-            "league": "ATP Masters",
-            "start_time": "Live Now (Set 2)",
-            "market_type": "Match Winner",
-            "bookmakers": {
-                "Pinnacle": {"odds": 1.95, "bet": "Djokovic", "link": "https://www.pinnacle.com"},
-                "Stake": {"odds": 2.05, "bet": "Alcaraz", "link": "https://stake.com"},
-                "Parimatch": {"odds": 2.00, "bet": "Alcaraz", "link": "https://parimatch.com"}
-            }
-        },
-        {
-            "id": "match_cricket_03",
-            "match_status": "🟢 PRE-MATCH",
-            "match": "India - Australia",
-            "sport": "Cricket",
-            "league": "International T20",
-            "start_time": f"{today_str} 14:30 UTC",
-            "market_type": "Match Winner",
-            "bookmakers": {
-                "1xBet": {"odds": 1.85, "bet": "India", "link": "https://1xbet.com"},
-                "Mostbet": {"odds": 2.08, "bet": "Australia", "link": "https://mostbet.com"},
-                "Melbet": {"odds": 1.90, "bet": "India", "link": "https://melbet.com"}
-            }
-        },
-        {
-            "id": "match_basketball_04",
-            "match_status": "🔴 LIVE MATCH",
-            "match": "L.A. Lakers - Boston Celtics",
-            "sport": "Basketball",
-            "league": "NBA",
-            "start_time": "Live Now (Q4)",
-            "market_type": "Asian Handicap",
-            "bookmakers": {
-                "Pinnacle": {"odds": 1.97, "bet": "AH2(+5.5)", "link": "https://www.pinnacle.com"},
-                "Stake": {"odds": 1.95, "bet": "AH2(+5.5)", "link": "https://stake.com"},
-                "4rabet": {"odds": 2.02, "bet": "AH1(-5.5)", "link": "https://4rabet.com"}
-            }
-        },
-        {
-            "id": "match_esports_05",
-            "match_status": "🟢 PRE-MATCH",
-            "match": "Natus Vincere - FaZe Clan",
-            "sport": "eSports",
-            "league": "CS2 Major",
-            "start_time": f"{today_str} 18:00 UTC",
-            "market_type": "Map Winner",
-            "bookmakers": {
-                "1xBet": {"odds": 1.91, "bet": "NaVi", "link": "https://1xbet.com"},
-                "Parimatch": {"odds": 2.04, "bet": "FaZe", "link": "https://parimatch.com"},
-                "Dafabet": {"odds": 1.95, "bet": "NaVi", "link": "https://dafabet.com"}
-            }
-        },
-        {
-            "id": "match_hockey_06",
-            "match_status": "🟢 PRE-MATCH",
-            "match": "Toronto Maple Leafs - Montreal Canadiens",
-            "sport": "Ice Hockey",
-            "league": "NHL",
-            "start_time": f"{today_str} 23:00 UTC",
-            "market_type": "Winner (Incl. OT)",
-            "bookmakers": {
-                "Pinnacle": {"odds": 1.88, "bet": "Leafs", "link": "https://www.pinnacle.com"},
-                "Mostbet": {"odds": 2.05, "bet": "Canadiens", "link": "https://mostbet.com"}
-            }
-        },
-        {
-            "id": "match_tabletennis_07",
-            "match_status": "🔴 LIVE MATCH",
-            "match": "Ma Long - Fan Zhendong",
-            "sport": "Table Tennis",
-            "league": "TT Elite Series",
-            "start_time": "Live Now (Game 3)",
-            "market_type": "Winner",
-            "bookmakers": {
-                "1xBet": {"odds": 1.98, "bet": "Ma Long", "link": "https://1xbet.com"},
-                "Melbet": {"odds": 2.01, "bet": "Fan Zhendong", "link": "https://melbet.com"}
-            }
-        },
-        {
-            "id": "match_volleyball_08",
-            "match_status": "🟢 PRE-MATCH",
-            "match": "Italy - Brazil",
-            "sport": "Volleyball",
-            "league": "World Championship",
-            "start_time": f"{today_str} 19:30 UTC",
-            "market_type": "Set Handicap",
-            "bookmakers": {
-                "Stake": {"odds": 1.93, "bet": "Italy", "link": "https://stake.com"},
-                "Dafabet": {"odds": 2.02, "bet": "Brazil", "link": "https://dafabet.com"}
-            }
-        }
-    ]
-    return matches
+def get_real_matches_from_api():
+    if not ODDS_API_KEY:
+        print("ODDS_API_KEY missing hai! Render environment variables me key add karein.")
+        return []
 
-def surebet_scanner_loop():
-    print("Multi-Sport Universal Surebet Bot started in background...")
-    send_telegram_alert("🚀 *Universal Surebet Bot* (All Sports Enabled) is now running 24/7 on Render!")
+    all_matches = []
+
+    for sport in SPORTS_TO_SCAN:
+        sport_key = sport["key"]
+        sport_name = sport["name"]
+        league_name = sport["league"]
+
+        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={ODDS_API_KEY}&regions=eu,uk&markets=h2h"
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                api_data = response.json()
+                
+                for item in api_data:
+                    match_id = item.get("id")
+                    home_team = item.get("home_team")
+                    away_team = item.get("away_team")
+                    commence_time = item.get("commence_time")
+                    
+                    bookmakers_dict = {}
+                    for bookie in item.get("bookmakers", []):
+                        b_key = bookie.get("key")
+                        
+                        if b_key in ALLOWED_BOOKMAKERS:
+                            b_info = ALLOWED_BOOKMAKERS[b_key]
+                            b_title = b_info["name"]
+                            b_domain = b_info["domain"]
+                            
+                            markets = bookie.get("markets", [])
+                            for m in markets:
+                                if m.get("key") == "h2h":
+                                    outcomes = m.get("outcomes", [])
+                                    for outcome in outcomes:
+                                        name = outcome.get("name")
+                                        price = outcome.get("price")
+                                        
+                                        if name == home_team:
+                                            bet_label = f"Home ({home_team})"
+                                        elif name == away_team:
+                                            bet_label = f"Away ({away_team})"
+                                        else:
+                                            bet_label = name
+                                            
+                                        bookmakers_dict[b_title] = {
+                                            "odds": price,
+                                            "bet": bet_label,
+                                            "link": f"https://www.{b_domain}"
+                                        }
+                    
+                    if len(bookmakers_dict) >= 2:
+                        all_matches.append({
+                            "id": match_id,
+                            "match_status": "🟢 LIVE / UPCOMING",
+                            "match": f"{home_team} - {away_team}",
+                            "sport": sport_name,
+                            "league": league_name,
+                            "start_time": commence_time,
+                            "market_type": "1X2 / Match Winner",
+                            "bookmakers": bookmakers_dict
+                        })
+        except Exception as e:
+            print(f"Error fetching odds for {sport_key}: {e}")
+
+    return all_matches
+
+def surebot_scanner_loop():
+    print("Multi-Sport Universal Surebet Bot started with All Sports & Custom Bookmakers...")
+    send_telegram_alert("🚀 *Universal Surebet Bot* ab Saare Sports aur Custom Bookmakers ke sath 24/7 live ho gaya hai!")
     
     while True:
         try:
-            matches_to_check = get_matches()
+            matches_to_check = get_real_matches_from_api()
             
             for item in matches_to_check:
                 match_id = item["id"]
@@ -173,7 +146,6 @@ def surebet_scanner_loop():
                 
                 bookie_names = list(bookmakers.keys())
                 
-                # Sabhi bookmakers ke odds ko aapas mein compare karna
                 for i in range(len(bookie_names)):
                     for j in range(i + 1, len(bookie_names)):
                         b1_name = bookie_names[i]
@@ -190,7 +162,6 @@ def surebet_scanner_loop():
                         if implied_prob < 1.0:
                             profit_percentage = ((1 / implied_prob) - 1) * 100
                             
-                            # Stake Distribution (Total Budget = 100 €)
                             total_budget = 100.0
                             stake1 = (total_budget / (odds1 * implied_prob))
                             stake2 = (total_budget / (odds2 * implied_prob))
@@ -220,17 +191,16 @@ def surebet_scanner_loop():
         except Exception as e:
             print(f"Error in scanner loop: {e}")
             
-        time.sleep(30)
+        time.sleep(60)
 
 @app.route('/')
 def home():
-    return "Universal All-Sports Surebet Bot is active and running 24/7 on Render!"
+    return "All-Sports Custom Surebet Bot is running 24/7 on Render!"
 
 if __name__ == '__main__':
-    t = threading.Thread(target=surebet_scanner_loop)
+    t = threading.Thread(target=surebot_scanner_loop)
     t.daemon = True
     t.start()
     
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-    
