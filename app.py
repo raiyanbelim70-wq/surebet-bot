@@ -25,15 +25,12 @@ ALLOWED_BOOKMAKERS = {
     "melbet": {"name": "Melbet", "domain": "melbet.com"}
 }
 
-# Scan karne ke liye alag-alag sports ki list (The Odds API keys)
+# Scan karne ke liye sports (Jisme draw ki problem na ho ya 2-way market ho)
 SPORTS_TO_SCAN = [
     {"key": "soccer_epl", "name": "Football", "league": "English Premier League"},
     {"key": "soccer_spain_la_liga", "name": "Football", "league": "Spain. La Liga"},
-    {"key": "cricket_ipl", "name": "Cricket", "league": "Indian Premier League"},
-    {"key": "cricket_international_t20", "name": "Cricket", "league": "International T20"},
     {"key": "tennis_atp_aus_open", "name": "Tennis", "league": "ATP Masters"},
-    {"key": "basketball_nba", "name": "Basketball", "league": "NBA"},
-    {"key": "icehockey_nhl", "name": "Ice Hockey", "league": "NHL"}
+    {"key": "basketball_nba", "name": "Basketball", "league": "NBA"}
 ]
 
 # Duplicate alerts ko rokne ke liye set
@@ -54,7 +51,7 @@ def send_telegram_alert(message):
 
 def get_real_matches_from_api():
     if not ODDS_API_KEY:
-        print("ODDS_API_KEY missing hai! Render environment variables me key add karein.")
+        print("ODDS_API_KEY missing hai!")
         return []
 
     all_matches = []
@@ -89,22 +86,25 @@ def get_real_matches_from_api():
                             for m in markets:
                                 if m.get("key") == "h2h":
                                     outcomes = m.get("outcomes", [])
-                                    for outcome in outcomes:
-                                        name = outcome.get("name")
-                                        price = outcome.get("price")
+                                    # Sirf wahi bookmakers lenge jinke paas sirf 2 outcomes hon (Home aur Away - Draw bilkul nahi)
+                                    if len(outcomes) == 2:
+                                        bookie_outcomes = {}
+                                        for outcome in outcomes:
+                                            name = outcome.get("name")
+                                            price = outcome.get("price")
+                                            if name == home_team:
+                                                bookie_outcomes["home"] = {"odds": price, "bet": f"Home ({home_team})"}
+                                            elif name == away_team:
+                                                bookie_outcomes["away"] = {"odds": price, "bet": f"Away ({away_team})"}
                                         
-                                        if name == home_team:
-                                            bet_label = f"Home ({home_team})"
-                                        elif name == away_team:
-                                            bet_label = f"Away ({away_team})"
-                                        else:
-                                            bet_label = name
-                                            
-                                        bookmakers_dict[b_title] = {
-                                            "odds": price,
-                                            "bet": bet_label,
-                                            "link": f"https://www.{b_domain}"
-                                        }
+                                        if "home" in bookie_outcomes and "away" in bookie_outcomes:
+                                            bookmakers_dict[b_title] = {
+                                                "home_odds": bookie_outcomes["home"]["odds"],
+                                                "home_bet": bookie_outcomes["home"]["bet"],
+                                                "away_odds": bookie_outcomes["away"]["odds"],
+                                                "away_bet": bookie_outcomes["away"]["bet"],
+                                                "link": f"https://www.{b_domain}"
+                                            }
                     
                     if len(bookmakers_dict) >= 2:
                         all_matches.append({
@@ -114,7 +114,7 @@ def get_real_matches_from_api():
                             "sport": sport_name,
                             "league": league_name,
                             "start_time": commence_time,
-                            "market_type": "1X2 / Match Winner",
+                            "market_type": "Match Winner (2-Way)",
                             "bookmakers": bookmakers_dict
                         })
         except Exception as e:
@@ -123,8 +123,8 @@ def get_real_matches_from_api():
     return all_matches
 
 def surebot_scanner_loop():
-    print("Multi-Sport Universal Surebet Bot started with All Sports & Custom Bookmakers...")
-    send_telegram_alert("🚀 *Universal Surebet Bot* ab Saare Sports aur Custom Bookmakers ke sath 24/7 live ho gaya hai!")
+    print("Surebet Bot started with Clean 2-Way Market Filtering...")
+    send_telegram_alert("🚀 *Surebet Bot* ab bilkul clean aur sahi 2-Way markets ke sath active ho gaya hai!")
     
     while True:
         try:
@@ -146,22 +146,26 @@ def surebot_scanner_loop():
                 
                 bookie_names = list(bookmakers.keys())
                 
+                # Surebet Logic: Bookie 1 ka Home aur Bookie 2 ka Away (ya ulta) compare karna
                 for i in range(len(bookie_names)):
-                    for j in range(i + 1, len(bookie_names)):
+                    for j in range(len(bookie_names)):
+                        if i == j:
+                            continue
+                            
                         b1_name = bookie_names[i]
                         b2_name = bookie_names[j]
                         
                         b1_data = bookmakers[b1_name]
                         b2_data = bookmakers[b2_name]
                         
-                        odds1 = b1_data["odds"]
-                        odds2 = b2_data["odds"]
+                        # Option A: Bookie 1 par Home, Bookie 2 par Away
+                        odds1 = b1_data["home_odds"]
+                        odds2 = b2_data["away_odds"]
                         
                         implied_prob = (1 / odds1) + (1 / odds2)
                         
                         if implied_prob < 1.0:
                             profit_percentage = ((1 / implied_prob) - 1) * 100
-                            
                             total_budget = 100.0
                             stake1 = (total_budget / (odds1 * implied_prob))
                             stake2 = (total_budget / (odds2 * implied_prob))
@@ -175,11 +179,11 @@ def surebot_scanner_loop():
                                 f"**Time:** {start_time}\n"
                                 f"**Market:** {market_type}\n\n"
                                 f"🔹 **{b1_name}**:\n"
-                                f"▫️ {b1_data['bet']} -> {odds1}\n"
+                                f"▫️ {b1_data['home_bet']} -> {odds1}\n"
                                 f"💵 **Stake:** {stake1:.1f} €\n"
                                 f"🔗 [Direct Match Entry]({b1_data['link']})\n\n"
                                 f"🔹 **{b2_name}**:\n"
-                                f"▫️ {b2_data['bet']} -> {odds2}\n"
+                                f"▫️ {b2_data['away_bet']} -> {odds2}\n"
                                 f"💵 **Stake:** {stake2:.1f} €\n"
                                 f"🔗 [Direct Match Entry]({b2_data['link']})"
                             )
@@ -188,6 +192,9 @@ def surebot_scanner_loop():
                             sent_alerts.add(match_id)
                             print(f"Surebet found for {sport} - {match_name} ({profit_percentage:.2f}%)")
                             break
+                    else:
+                        continue
+                    break
         except Exception as e:
             print(f"Error in scanner loop: {e}")
             
@@ -195,7 +202,7 @@ def surebot_scanner_loop():
 
 @app.route('/')
 def home():
-    return "All-Sports Custom Surebet Bot is running 24/7 on Render!"
+    return "Clean 2-Way Surebet Bot is running 24/7 on Render!"
 
 if __name__ == '__main__':
     t = threading.Thread(target=surebot_scanner_loop)
@@ -204,3 +211,4 @@ if __name__ == '__main__':
     
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+                            
