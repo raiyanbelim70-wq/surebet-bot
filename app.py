@@ -9,8 +9,10 @@ from flask import Flask
 app = Flask(__name__)
 
 # Telegram Credentials
-TOKEN = "8001955184:AAFJ4NbmFHwVhpWB9LETM_K1ESdRWS8YDd8"
-CHAT_ID = "5292908963"
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+
 
 # Duplicate alerts ko rokne ke liye set
 sent_alerts = set()
