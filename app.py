@@ -1,40 +1,90 @@
 import os
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 from flask import Flask
 
 app = Flask(__name__)
 
-# Telegram Credentials
 TOKEN = "8001955184:AAFJ4NbmFHwVhpWB9LETM_K1ESdRWS8YDd8"
 CHAT_ID = "5292908963"
-
-# The Odds API Key
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
 
-# Aapke pasandida bookmakers ki mapping
 ALLOWED_BOOKMAKERS = {
-    "pinnacle": {"name": "Pinnacle", "domain": "pinnacle.com"},
-    "onexbet": {"name": "1xBet", "domain": "1xbet.com"},
-    "dafabet": {"name": "Dafabet", "domain": "dafabet.com"},
-    "mostbet": {"name": "Mostbet", "domain": "mostbet.com"},
-    "stake": {"name": "Stake", "domain": "stake.com"},
-    "parimatch": {"name": "Parimatch", "domain": "parimatch.com"},
-    "melbet": {"name": "Melbet", "domain": "melbet.com"}
+    "pinnacle": {"name": "Pinnacle", "base_url": "https://www.pinnacle.com"},
+    "onexbet": {"name": "1xBet", "base_url": "https://1xbet.com"},
+    "dafabet": {"name": "Dafabet", "base_url": "https://www.dafabet.com"},
+    "mostbet": {"name": "Mostbet", "base_url": "https://mostbet.com"},
+    "stake": {"name": "Stake", "base_url": "https://stake.com"},
+    "parimatch": {"name": "Parimatch", "base_url": "https://parimatch.com"},
+    "melbet": {"name": "Melbet", "base_url": "https://melbet.com"}
 }
 
-# Scan karne ke liye sports (Football, Tennis, Basketball, Cricket etc.)
+# Duniya bhar ke saare sports aur unki saari major leagues ki complete list
 SPORTS_TO_SCAN = [
+    # Football / Soccer (Saari badi leagues)
     {"key": "soccer_epl", "name": "Football", "league": "English Premier League"},
-    {"key": "soccer_spain_la_liga", "name": "Football", "league": "Spain. La Liga"},
-    {"key": "tennis_atp_aus_open", "name": "Tennis", "league": "ATP Masters"},
+    {"key": "soccer_spain_la_liga", "name": "Football", "league": "Spain La Liga"},
+    {"key": "soccer_italy_serie_a", "name": "Football", "league": "Italy Serie A"},
+    {"key": "soccer_germany_bundesliga", "name": "Football", "league": "Germany Bundesliga"},
+    {"key": "soccer_france_ligue_one", "name": "Football", "league": "France Ligue 1"},
+    {"key": "soccer_uefa_champs_league", "name": "Football", "league": "UEFA Champions League"},
+    {"key": "soccer_uefa_europa_league", "name": "Football", "league": "UEFA Europa League"},
+    {"key": "soccer_england_championship", "name": "Football", "league": "England Championship"},
+    {"key": "soccer_spain_segunda_division", "name": "Football", "league": "Spain Segunda Division"},
+    {"key": "soccer_italy_serie_b", "name": "Football", "league": "Italy Serie B"},
+    {"key": "soccer_germany_bundesliga2", "name": "Football", "league": "Germany Bundesliga 2"},
+    {"key": "soccer_netherlands_eredivisie", "name": "Football", "league": "Netherlands Eredivisie"},
+    {"key": "soccer_portugal_primeira_liga", "name": "Football", "league": "Portugal Primeira Liga"},
+    {"key": "soccer_turkey_super_lig", "name": "Football", "league": "Turkey Super Lig"},
+    {"key": "soccer_greece_super_league", "name": "Football", "league": "Greece Super League"},
+    {"key": "soccer_australia_aleague", "name": "Football", "league": "Australia A-League"},
+    {"key": "soccer_usa_mls", "name": "Football", "league": "USA MLS"},
+    {"key": "soccer_brazil_campeonato", "name": "Football", "league": "Brazil Serie A"},
+    {"key": "soccer_argentina_primera_division", "name": "Football", "league": "Argentina Primera Division"},
+
+    # Basketball
     {"key": "basketball_nba", "name": "Basketball", "league": "NBA"},
-    {"key": "cricket_ipl", "name": "Cricket", "league": "IPL / T20"}
+    {"key": "basketball_euroleague", "name": "Basketball", "league": "Euroleague"},
+    {"key": "basketball_ncaab", "name": "Basketball", "league": "NCAA Basketball"},
+    {"key": "basketball_spain_acb", "name": "Basketball", "league": "Spain ACB"},
+    {"key": "basketball_italy_lega_basket", "name": "Basketball", "league": "Italy Lega Basket"},
+
+    # Tennis (ATP & WTA)
+    {"key": "tennis_atp_aus_open", "name": "Tennis", "league": "ATP Australian Open"},
+    {"key": "tennis_wta_aus_open", "name": "Tennis", "league": "WTA Australian Open"},
+    {"key": "tennis_atp_french_open", "name": "Tennis", "league": "ATP French Open"},
+    {"key": "tennis_wta_french_open", "name": "Tennis", "league": "WTA French Open"},
+    {"key": "tennis_atp_wimbledon", "name": "Tennis", "league": "ATP Wimbledon"},
+    {"key": "tennis_wta_wimbledon", "name": "Tennis", "league": "WTA Wimbledon"},
+    {"key": "tennis_atp_us_open", "name": "Tennis", "league": "ATP US Open"},
+    {"key": "tennis_wta_us_open", "name": "Tennis", "league": "WTA US Open"},
+
+    # Cricket
+    {"key": "cricket_ipl", "name": "Cricket", "league": "Indian Premier League (IPL)"},
+    {"key": "cricket_international_t20", "name": "Cricket", "league": "International T20"},
+    {"key": "cricket_test_match", "name": "Cricket", "league": "Test Matches"},
+    {"key": "cricket_odi", "name": "Cricket", "league": "ODI Series"},
+    {"key": "cricket_big_bash", "name": "Cricket", "league": "Big Bash League (BBL)"},
+    {"key": "cricket_psl", "name": "Cricket", "league": "Pakistan Super League (PSL)"},
+
+    # Ice Hockey
+    {"key": "icehockey_nhl", "name": "Ice Hockey", "league": "NHL"},
+    {"key": "icehockey_sweden_hockey_league", "name": "Ice Hockey", "league": "Sweden Hockey League"},
+    {"key": "icehockey_khl", "name": "Ice Hockey", "league": "KHL"},
+
+    # American Football & Baseball
+    {"key": "americanfootball_nfl", "name": "American Football", "league": "NFL"},
+    {"key": "americanfootball_ncaaf", "name": "American Football", "league": "NCAAF"},
+    {"key": "baseball_mlb", "name": "Baseball", "league": "MLB"},
+    {"key": "baseball_npb", "name": "Baseball", "league": "Japan NPB"},
+
+    # Rugby & MMA
+    {"key": "rugbyleague_nrl", "name": "Rugby", "league": "NRL"},
+    {"key": "mma_mixed_martial_arts", "name": "MMA", "league": "UFC / MMA"}
 ]
 
-# Duplicate alerts rokne ke liye set
 sent_alerts = set()
 
 def send_telegram_alert(message):
@@ -50,14 +100,25 @@ def send_telegram_alert(message):
     except Exception as e:
         print(f"Telegram Error: {e}")
 
+def get_match_status_and_color(commence_time_str):
+    try:
+        match_time = datetime.fromisoformat(commence_time_str.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        diff_hours = (match_time - now).total_seconds() / 3600
+        
+        if diff_hours <= 0:
+            return "🔴 LIVE", diff_hours
+        elif diff_hours <= 48:
+            return "🟢 UPCOMING", diff_hours
+    except Exception as e:
+        print(f"Time parse error: {e}")
+    return None, 999
+
 def get_real_matches_from_api():
     if not ODDS_API_KEY:
-        print("ODDS_API_KEY missing hai!")
         return []
 
     all_opportunities = []
-
-    # Hum yahan h2h (Match Winner), spreads (Handicap), aur totals (Over/Under) teeno markets fetch karenge
     markets_str = "h2h,spreads,totals"
 
     for sport in SPORTS_TO_SCAN:
@@ -72,26 +133,49 @@ def get_real_matches_from_api():
                 api_data = response.json()
                 
                 for item in api_data:
+                    commence_time = item.get("commence_time")
+                    if not commence_time:
+                        continue
+                        
+                    status_label, diff_hours = get_match_status_and_color(commence_time)
+                    if not status_label or diff_hours > 48 or diff_hours < -4:
+                        continue
+                        
                     match_id = item.get("id")
                     home_team = item.get("home_team")
                     away_team = item.get("away_team")
-                    commence_time = item.get("commence_time")
                     
-                    # Har bookmaker ke liye markets ka data collect karenge
-                    bookmakers_markets = {} # Format: {bookie_name: {market_key_subtype: {data}}}
+                    match_query = f"{home_team} vs {away_team}".replace(" ", "+")
+                    bookmakers_markets = {}
                     
                     for bookie in item.get("bookmakers", []):
                         b_key = bookie.get("key")
                         if b_key in ALLOWED_BOOKMAKERS:
                             b_info = ALLOWED_BOOKMAKERS[b_key]
                             b_title = b_info["name"]
-                            b_domain = b_info["domain"]
+                            b_base = b_info["base_url"]
                             
+                            if b_title == "1xBet":
+                                direct_link = f"https://1xbet.com/en/search/{match_query}"
+                            elif b_title == "Pinnacle":
+                                direct_link = f"https://www.pinnacle.com/en/search/{match_query}"
+                            elif b_title == "Stake":
+                                direct_link = f"https://stake.com/sports/search?q={match_query}"
+                            elif b_title == "Dafabet":
+                                direct_link = f"https://www.dafabet.com/en/sports/search?q={match_query}"
+                            elif b_title == "Mostbet":
+                                direct_link = f"https://mostbet.com/search?query={match_query}"
+                            elif b_title == "Parimatch":
+                                direct_link = f"https://parimatch.com/en/search?query={match_query}"
+                            elif b_title == "Melbet":
+                                direct_link = f"https://melbet.com/en/search/{match_query}"
+                            else:
+                                direct_link = b_base
+
                             for m in bookie.get("markets", []):
                                 m_key = m.get("key")
                                 outcomes = m.get("outcomes", [])
                                 
-                                # 1. H2H Market (2-Way only to avoid Draw error)
                                 if m_key == "h2h" and len(outcomes) == 2:
                                     b_outcomes = {}
                                     for outcome in outcomes:
@@ -111,33 +195,27 @@ def get_real_matches_from_api():
                                             "bet1_desc": b_outcomes["home"]["desc"],
                                             "bet2_odds": b_outcomes["away"]["odds"],
                                             "bet2_desc": b_outcomes["away"]["desc"],
-                                            "link": f"https://www.{b_domain}"
+                                            "link": direct_link
                                         }
 
-                                # 2. Spreads (Handicap) Market
                                 elif m_key == "spreads" and len(outcomes) == 2:
-                                    # Spreads mein point bhi hota hai (jaise -1.5 ya +1.5)
                                     o1, o2 = outcomes[0], outcomes[1]
-                                    # Dono ka point same hona chahiye valid comparison ke liye
-                                    if o1.get("point") == -o2.get("point") or o1.get("point") == o2.get("point"):
-                                        p1, p2 = o1.get("point"), o2.get("point")
-                                        market_id = f"Handicap ({o1.get('name')} {p1})"
+                                    p1, p2 = o1.get("point"), o2.get("point")
+                                    market_id = f"Handicap ({o1.get('name')} {p1})"
+                                    
+                                    if market_id not in bookmakers_markets:
+                                        bookmakers_markets[market_id] = {}
                                         
-                                        if b_title not in bookmakers_markets.get(market_id, {}):
-                                            if market_id not in bookmakers_markets:
-                                                bookmakers_markets[market_id] = {}
-                                            
-                                            bookmakers_markets[market_id][b_title] = {
-                                                "bet1_odds": o1.get("price"),
-                                                "bet1_desc": f"{o1.get('name')} (Handicap {p1})",
-                                                "bet2_odds": o2.get("price"),
-                                                "bet2_desc": f"{o2.get('name')} (Handicap {p2})",
-                                                "link": f"https://www.{b_domain}"
-                                            }
+                                    bookmakers_markets[market_id][b_title] = {
+                                        "bet1_odds": o1.get("price"),
+                                        "bet1_desc": f"{o1.get('name')} ({p1})",
+                                        "bet2_odds": o2.get("price"),
+                                        "bet2_desc": f"{o2.get('name')} ({p2})",
+                                        "link": direct_link
+                                    }
 
-                                # 3. Totals (Over/Under) Market
                                 elif m_key == "totals" and len(outcomes) == 2:
-                                    o1, o2 = outcomes[0], outcomes[1] # Over aur Under
+                                    o1, o2 = outcomes[0], outcomes[1]
                                     point = o1.get("point")
                                     market_id = f"Totals Over/Under ({point})"
                                     
@@ -153,10 +231,9 @@ def get_real_matches_from_api():
                                             "bet1_desc": f"Over {point}",
                                             "bet2_odds": under_item.get("price"),
                                             "bet2_desc": f"Under {point}",
-                                            "link": f"https://www.{b_domain}"
+                                            "link": direct_link
                                         }
 
-                    # Har market ke liye surebet check karna
                     for market_type, bookies_dict in bookmakers_markets.items():
                         b_names = list(bookies_dict.keys())
                         if len(b_names) >= 2:
@@ -169,7 +246,6 @@ def get_real_matches_from_api():
                                     data1 = bookies_dict[b1]
                                     data2 = bookies_dict[b2]
                                     
-                                    # Bet 1 (e.g. Home/Over) aur Bet 2 (e.g. Away/Under)
                                     odds1 = data1["bet1_odds"]
                                     odds2 = data2["bet2_odds"]
                                     
@@ -180,79 +256,77 @@ def get_real_matches_from_api():
                                     
                                     if implied_prob < 1.0:
                                         profit_percentage = ((1 / implied_prob) - 1) * 100
-                                        total_budget = 100.0
-                                        stake1 = (total_budget / (odds1 * implied_prob))
-                                        stake2 = (total_budget / (odds2 * implied_prob))
                                         
-                                        unique_alert_key = f"{match_id}_{market_type}_{b1}_{b2}"
-                                        
-                                        all_opportunities.append({
-                                            "alert_key": unique_alert_key,
-                                            "match_status": "🟢 LIVE / UPCOMING",
-                                            "match": f"{home_team} - {away_team}",
-                                            "sport": sport_name,
-                                            "league": league_name,
-                                            "start_time": commence_time,
-                                            "market_type": market_type,
-                                            "b1_name": b1,
-                                            "b1_bet": data1["bet1_desc"],
-                                            "b1_odds": odds1,
-                                            "b1_stake": stake1,
-                                            "b1_link": data1["link"],
-                                            "b2_name": b2,
-                                            "b2_bet": data2["bet2_desc"],
-                                            "b2_odds": odds2,
-                                            "b2_stake": stake2,
-                                            "b2_link": data2["link"],
-                                            "profit": profit_percentage
-                                        })
+                                        if profit_percentage >= 1.0:
+                                            total_budget = 100.0
+                                            stake1 = (total_budget / (odds1 * implied_prob))
+                                            stake2 = (total_budget / (odds2 * implied_prob))
+                                            
+                                            unique_alert_key = f"{match_id}_{market_type}_{b1}_{b2}"
+                                            
+                                            all_opportunities.append({
+                                                "alert_key": unique_alert_key,
+                                                "match_status": status_label,
+                                                "match": f"{home_team} - {away_team}",
+                                                "sport": sport_name,
+                                                "league": league_name,
+                                                "start_time": commence_time,
+                                                "market_type": market_type,
+                                                "b1_name": b1,
+                                                "b1_bet": data1["bet1_desc"],
+                                                "b1_odds": odds1,
+                                                "b1_stake": stake1,
+                                                "b1_link": data1["link"],
+                                                "b2_name": b2,
+                                                "b2_bet": data2["bet2_desc"],
+                                                "b2_odds": odds2,
+                                                "b2_stake": stake2,
+                                                "b2_link": data2["link"],
+                                                "profit": profit_percentage
+                                            })
         except Exception as e:
-            print(f"Error fetching data for {sport_key}: {e}")
+            print(f"Error scanning sport {sport_key}: {e}")
 
     return all_opportunities
 
 def surebot_scanner_loop():
-    print("Multi-Market Surebet Bot started (H2H, Handicaps, Totals)...")
-    send_telegram_alert("🚀 *Multi-Market Surebet Bot* active ho gaya hai! (Match Winner, Handicaps & Totals saare markets included)")
+    print("Fixed List Universal Surebet Bot started...")
+    send_telegram_alert("🚀 *Master Surebet Bot Active:* Saare fix sports aur leagues ki list ke sath scanner start ho gaya hai!")
     
     while True:
         try:
             opportunities = get_real_matches_from_api()
-            
             for opp in opportunities:
-                alert_key = opp["alert_key"]
-                
-                if alert_key in sent_alerts:
+                if opp["alert_key"] in sent_alerts:
                     continue
                     
                 message = (
                     f"💰 **New {opp['market_type']} Surebet!** ({opp['match_status']})\n"
-                    f"**Sport:** {opp['sport']} | {opp['league']}\n"
+                    f"**Sport:** {opp['sport']} | **League:** {opp['league']}\n"
                     f"**Event:** {opp['match']}\n"
                     f"**Profit:** {opp['profit']:.2f}%\n"
                     f"**Time:** {opp['start_time']}\n\n"
                     f"🔹 **{opp['b1_name']}**:\n"
                     f"▫️ {opp['b1_bet']} -> {opp['b1_odds']}\n"
                     f"💵 **Stake:** {opp['b1_stake']:.1f} €\n"
-                    f"🔗 [Direct Match Entry]({opp['b1_link']})\n\n"
+                    f"🔗 [Direct Match Page]({opp['b1_link']})\n\n"
                     f"🔹 **{opp['b2_name']}**:\n"
                     f"▫️ {opp['b2_bet']} -> {opp['b2_odds']}\n"
                     f"💵 **Stake:** {opp['b2_stake']:.1f} €\n"
-                    f"🔗 [Direct Match Entry]({opp['b2_link']})"
+                    f"🔗 [Direct Match Page]({opp['b2_link']})"
                 )
                 
                 send_telegram_alert(message)
-                sent_alerts.add(alert_key)
-                print(f"Alert sent for {opp['match']} - Profit: {opp['profit']:.2f}%")
+                sent_alerts.add(opp["alert_key"])
                 
         except Exception as e:
-            print(f"Error in scanner loop: {e}")
+            print(f"Loop error: {e}")
             
         time.sleep(60)
 
 @app.route('/')
 def home():
-    return "Multi-Market Surebet Bot is running 24/7 on Render!"
+    return "Fixed List Surebet Bot is running 24/7 on Render!"
 
 if __name__ == '__main__':
     t = threading.Thread(target=surebot_scanner_loop)
@@ -261,4 +335,4 @@ if __name__ == '__main__':
     
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-                                        
+    
