@@ -227,7 +227,7 @@ def home():
     return "Universal All-Sports Surebet Bot is active and running 24/7 on Render!"
 
 if __name__ == '__main__':
-    t = threading.Thread(target=surebot_scanner_loop)
+    t = threading.Thread(target=surebet_scanner_loop)
     t.daemon = True
     t.start()
     
