@@ -5,7 +5,6 @@ import requests
 import cloudscraper
 from flask import Flask
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 
@@ -31,23 +30,22 @@ def send_telegram_alert(message):
 
 def scrape_bookmaker_original_data(bookmaker_name, sport_name, league_name, market_type):
     scraped_matches = []
-    
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'android',
-            'desktop': False
-        }
-    )
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": f"https://www.{bookmaker_name.lower().replace('.', '')}.com/"
-    }
-
     try:
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'android',
+                'desktop': False
+            }
+        )
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": f"https://www.{bookmaker_name.lower().replace('.', '')}.com/"
+        }
+
         api_url = f"https://rproxy.{bookmaker_name.lower().replace('.', '')}.com/sportsbook-api/v1/events/live?sport={sport_name}"
         response = scraper.get(api_url, headers=headers, timeout=10)
         
@@ -80,10 +78,13 @@ def background_worker():
     sports = ["football", "tennis", "basketball"]
     
     while True:
-        with ThreadPoolExecutor(max_features=4) as executor:
+        try:
             for bm in bookmakers:
                 for sport in sports:
-                    executor.submit(scrape_bookmaker_original_data, bm, sport, "General", "1X2")
+                    scrape_bookmaker_original_data(bm, sport, "General", "1X2")
+        except Exception as e:
+            print(f"Worker Error: {e}")
+            
         time.sleep(30)
 
 if __name__ == '__main__':
