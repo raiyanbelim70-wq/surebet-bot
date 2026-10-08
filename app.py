@@ -22,7 +22,8 @@ def send_telegram_alert(message):
             "text": message,
             "parse_mode": "Markdown"
         }
-        requests.post(url, json=payload, timeout=10)
+        response = requests.post(url, json=payload, timeout=10)
+        print(f"Telegram Response: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"Telegram Error: {e}")
 
@@ -53,7 +54,7 @@ def calculate_surebet(odds_list):
     return False, 0, "", 0, "", 0
 
 def scan_all_sports():
-    # Bot start hone ka notification Telegram par bhej do
+    time.sleep(5)  # Thoda wait karte hain taaki server fully stable ho jaye
     send_telegram_alert("🚀 *Surebet Scanner Bot is Live & Scanning!* (1xBet, Parimatch, Pinnacle, Stake)")
     
     while True:
@@ -128,4 +129,9 @@ start_background_scanner()
 @app.route('/')
 def home():
     return "🚀 Full-Speed Telegram Surebet Scanner is Live and Running!"
+
+@app.route('/test-telegram')
+def test_telegram():
+    send_telegram_alert("🧪 *Test Alert:* Telegram integration is working perfectly!")
+    return "Test message sent to Telegram!"
     
