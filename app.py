@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 import requests
 from flask import Flask
 
+app = Flask.name if "__name__" == "__main__" else Flask(__name__) # Safely initialized
 app = Flask(__name__)
 
 TOKEN = "6001955104:AAFJAN8mFHNW9pMs8DLETR-K1E5dWn50tdd"
 CHAT_ID = "5292910962"
 ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
 
+# 12 Bookmakers including 4rabet and top Indian market platforms
 ALLOWED_BOOKMAKERS = {
     "pinnacle": {"name": "Pinnacle", "base_url": "https://www.pinnacle.com"},
     "onexbet": {"name": "1xBet", "base_url": "https://1xbet.com"},
@@ -18,60 +20,29 @@ ALLOWED_BOOKMAKERS = {
     "mostbet": {"name": "Mostbet", "base_url": "https://mostbet.com"},
     "stake": {"name": "Stake", "base_url": "https://stake.com"},
     "parimatch": {"name": "Parimatch", "base_url": "https://parimatch.com"},
-    "melbet": {"name": "Melbet", "base_url": "https://melbet.com"}
+    "melbet": {"name": "Melbet", "base_url": "https://melbet.com"},
+    "4rabet": {"name": "4rabet", "base_url": "https://4rabet.com"},
+    "megapari": {"name": "Megapari", "base_url": "https://megapari.com"},
+    "bcgame": {"name": "BC.Game", "base_url": "https://bc.game"},
+    "betwinner": {"name": "Betwinner", "base_url": "https://betwinner.com"},
+    "rajabets": {"name": "Rajabets", "base_url": "https://rajabets.com"}
 }
 
-# Duniya bhar ki sabhi mukhya leagues aur sports ki massive list
 SPORTS_TO_SCAN = [
-    # Football / Soccer (Global Leagues)
     {"key": "soccer_epl", "name": "Football", "league": "English Premier League"},
     {"key": "soccer_spain_la_liga", "name": "Football", "league": "Spain La Liga"},
     {"key": "soccer_italy_serie_a", "name": "Football", "league": "Italy Serie A"},
     {"key": "soccer_germany_bundesliga", "name": "Football", "league": "Germany Bundesliga"},
     {"key": "soccer_france_ligue_one", "name": "Football", "league": "France Ligue 1"},
     {"key": "soccer_uefa_champs_league", "name": "Football", "league": "UEFA Champions League"},
-    {"key": "soccer_uefa_europa_league", "name": "Football", "league": "UEFA Europa League"},
-    {"key": "soccer_netherlands_eredivisie", "name": "Football", "league": "Netherlands Eredivisie"},
-    {"key": "soccer_portugal_primeira_liga", "name": "Football", "league": "Portugal Primeira Liga"},
-    {"key": "soccer_turkey_super_league", "name": "Football", "league": "Turkey Super Lig"},
-    {"key": "soccer_greece_super_league", "name": "Football", "league": "Greece Super League"},
-    {"key": "soccer_brazil_campeonato", "name": "Football", "league": "Brazil Serie A"},
-    {"key": "soccer_argentina_primera_division", "name": "Football", "league": "Argentina Primera Division"},
-    {"key": "soccer_mexico_ligamx", "name": "Football", "league": "Mexico Liga MX"},
-    {"key": "soccer_japan_j_league", "name": "Football", "league": "Japan J League"},
-    {"key": "soccer_korea_kleague1", "name": "Football", "league": "South Korea K League 1"},
-    {"key": "soccer_australia_aleague", "name": "Football", "league": "Australia A-League"},
-
-    # Basketball
     {"key": "basketball_nba", "name": "Basketball", "league": "NBA"},
     {"key": "basketball_euroleague", "name": "Basketball", "league": "Euroleague"},
-    {"key": "basketball_ncaab", "name": "Basketball", "league": "NCAA College Basketball"},
-    {"key": "basketball_australia_nbl", "name": "Basketball", "league": "Australia NBL"},
-    {"key": "basketball_italy_lega_basket", "name": "Basketball", "league": "Italy Lega Basket"},
-    {"key": "basketball_spain_acb", "name": "Basketball", "league": "Spain ACB"},
-
-    # Tennis (ATP & WTA)
     {"key": "tennis_atp_aus_open", "name": "Tennis", "league": "ATP Australian Open"},
     {"key": "tennis_wta_aus_open", "name": "Tennis", "league": "WTA Australian Open"},
-    {"key": "tennis_atp_french_open", "name": "Tennis", "league": "ATP French Open"},
-    {"key": "tennis_wta_french_open", "name": "Tennis", "league": "WTA French Open"},
-    {"key": "tennis_atp_wimbledon", "name": "Tennis", "league": "ATP Wimbledon"},
-    {"key": "tennis_wta_wimbledon", "name": "Tennis", "league": "WTA Wimbledon"},
-    {"key": "tennis_atp_us_open", "name": "Tennis", "league": "ATP US Open"},
-    {"key": "tennis_wta_us_open", "name": "Tennis", "league": "WTA US Open"},
-
-    # Cricket
     {"key": "cricket_ipl", "name": "Cricket", "league": "Indian Premier League (IPL)"},
     {"key": "cricket_international_t20", "name": "Cricket", "league": "International T20"},
-    {"key": "cricket_odi", "name": "Cricket", "league": "ODI Matches"},
-    {"key": "cricket_test_match", "name": "Cricket", "league": "Test Matches"},
     {"key": "cricket_big_bash", "name": "Cricket", "league": "Big Bash League (BBL)"},
-    {"key": "cricket_psl", "name": "Cricket", "league": "Pakistan Super League (PSL)"},
-
-    # Ice Hockey
-    {"key": "icehockey_nhl", "name": "Ice Hockey", "league": "NHL"},
-    {"key": "icehockey_sweden_hockey_league", "name": "Ice Hockey", "league": "Sweden Hockey League"},
-    {"key": "icehockey_khl", "name": "Ice Hockey", "league": "KHL"}
+    {"key": "icehockey_nhl", "name": "Ice Hockey", "league": "NHL"}
 ]
 
 sent_alerts = set()
@@ -115,7 +86,7 @@ def get_real_matches_from_api():
         sport_name = sport["name"]
         league_name = sport["league"]
 
-        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={ODDS_API_KEY}&regions=eu,us,uk,au&markets={markets_str}"
+        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={ODDS_API_KEY}&regions=eu,us,uk,au,in&markets={markets_str}"
         
         try:
             response = requests.get(url, timeout=10)
@@ -144,23 +115,7 @@ def get_real_matches_from_api():
                             b_info = ALLOWED_BOOKMAKERS[b_key]
                             b_title = b_info["name"]
                             b_base = b_info["base_url"]
-
-                            if b_title == "1xBet":
-                                direct_link = f"https://1xbet.com/en/search?query={match_query}"
-                            elif b_title == "Pinnacle":
-                                direct_link = f"https://www.pinnacle.com/en/search?query={match_query}"
-                            elif b_title == "Stake":
-                                direct_link = f"https://stake.com/sports/search?query={match_query}"
-                            elif b_title == "Dafabet":
-                                direct_link = f"https://www.dafabet.com/en/sports/search?query={match_query}"
-                            elif b_title == "Mostbet":
-                                direct_link = f"https://mostbet.com/search?query={match_query}"
-                            elif b_title == "Parimatch":
-                                direct_link = f"https://parimatch.com/en/search?query={match_query}"
-                            elif b_title == "Melbet":
-                                direct_link = f"https://melbet.com/en/search?query={match_query}"
-                            else:
-                                direct_link = b_base
+                            direct_link = f"{b_base}/search?query={match_query}"
 
                             for m in bookie.get("markets", []):
                                 n_key = m.get("key")
@@ -277,14 +232,14 @@ def get_real_matches_from_api():
     return all_opportunities
 
 def sure_bet_scanner_loop():
-    print("Ultimate Master Sure Bet Scanner started successfully...")
-    send_telegram_alert("🚀 *Ultimate Master Sure Bet Bot Active:* Duniya bhar ki saari leagues aur 7 authorized bookmakers ke sath scanner live ho gaya hai!")
+    print("Final Sure Bet Scanner started successfully...")
+    send_telegram_alert("🚀 *Final Sure Bet Bot Active:* 12 bookmakers (4rabet, Stake, 1xBet, Pinnacle, etc.) aur global+India regions ke sath live scanner shuru ho gaya hai!")
     
     while True:
         try:
-            print("Scanning global leagues and matches for Sure Bets...")
+            print("Scanning matches for Sure Bets...")
             opportunities = get_real_matches_from_api()
-            print(f"Scan complete. Total Sure Bets found in this cycle: {len(opportunities)}")
+            print(f"Scan complete. Total Sure Bets found: {len(opportunities)}")
             
             for opp in opportunities:
                 if opp["alert_key"] in sent_alerts:
@@ -312,11 +267,11 @@ def sure_bet_scanner_loop():
         except Exception as e:
             print(f"Loop error: {e}")
         
-        time.sleep(60)
+        time.sleep(30) # Scan interval reduced to 30 seconds for faster checks
 
 @app.route('/')
 def home():
-    return "Ultimate Master Sure Bet Bot is running 24/7 on Render!"
+    return "Final Sure Bet Bot is running 24/7 on Render!"
 
 if __name__ == '__main__':
     t = threading.Thread(target=sure_bet_scanner_loop)
@@ -325,4 +280,3 @@ if __name__ == '__main__':
 
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-        
