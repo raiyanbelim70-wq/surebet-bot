@@ -31,10 +31,6 @@ def send_telegram_alert(message):
         print(f"Telegram Error: {e}")
 
 def fetch_odds_from_bookmakers(sport, market, status):
-    """
-    Scans all 12 bookmakers for both LIVE and UPCOMING matches 
-    across all major sports and betting markets using IPRoyal proxy.
-    """
     proxies = {
         "http": PROXY_URL,
         "https": PROXY_URL
@@ -50,13 +46,12 @@ def fetch_odds_from_bookmakers(sport, market, status):
     live_matches_cache = {}
     type_path = "live" if status == "LIVE" else "line"
 
-    # Stake query safely structured to avoid any Python f-string curly brace syntax errors
-    stake_query = "query" + status.capitalize() + "Events{" + sport + "}"
+    # Targeted endpoints optimized for Indian accessible bookmakers
+    stake_url = "https://stake.com/_api/graphql?query=query{}Events%7B{}%7D".format(status.capitalize(), sport)
 
-    # Comprehensive Bookmaker API Endpoints mapping for all sports & markets
     bookmaker_endpoints = {
         "1xBet": f"https://1xbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Stake": f"https://stake.com/_api/graphql?query={stake_query}",
+        "Stake": stake_url,
         "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
         "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
@@ -64,12 +59,9 @@ def fetch_odds_from_bookmakers(sport, market, status):
         "Betwinner": f"https://betwinner.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Linebet": f"https://linebet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "MegaPari": f"https://megapari.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "10CRIC": f"https://www.10cric.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
-        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}",
-        "Pariwin": f"https://pariwin.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}"
+        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}"
     }
 
-    # Direct Bookmaker Base URLs for quick user access via Telegram buttons/links
     bookmaker_urls = {
         "1xBet": "https://1xbet.com",
         "Stake": "https://stake.com",
@@ -80,9 +72,7 @@ def fetch_odds_from_bookmakers(sport, market, status):
         "Betwinner": "https://betwinner.com",
         "Linebet": "https://linebet.com",
         "MegaPari": "https://megapari.com",
-        "10CRIC": "https://www.10cric.com",
-        "Pinnacle": "https://www.pinnacle.com",
-        "Pariwin": "https://pariwin.com"
+        "Pinnacle": "https://www.pinnacle.com"
     }
 
     for bm, endpoint in bookmaker_endpoints.items():
@@ -90,21 +80,41 @@ def fetch_odds_from_bookmakers(sport, market, status):
             response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
             if response.status_code == 200:
                 data = response.json()
-                events_list = data.get("result", data.get("data", data.get("events", [])))
                 
+                # Deep flexible extraction for 1xBet, Pinnacle and other Indian target sites
+                events_list = []
+                if isinstance(data, dict):
+                    events_list = data.get("result", data.get("data", data.get("events", data.get("Value", []))))
+                    if not events_list and "sports" in data:
+                        events_list = data["sports"]
+                elif isinstance(data, list):
+                    events_list = data
+
                 if isinstance(events_list, list):
                     for event in events_list:
                         match_name = event.get("name", event.get("matchName", event.get("homeTeam", "") + " vs " + event.get("awayTeam", "")))
-                        odds_list = event.get("odds", event.get("prices", []))
+                        odds_list = event.get("odds", event.get("prices", event.get("markets", [])))
                         
-                        if match_name and len(odds_list) >= 2:
+                        # Fallback parsing for 1xBet/Melbet nested structure
+                        extracted_odds = []
+                        if isinstance(odds_list, list) and len(odds_list) > 0:
+                            for odd in odds_list:
+                                if isinstance(odd, dict):
+                                    val = odd.get("C", odd.get("price", odd.get("value", 0)))
+                                    try:
+                                        if val: extracted_odds.append(float(val))
+                                    except:
+                                        pass
+                                elif isinstance(odd, (int, float)):
+                                    extracted_odds.append(float(odd))
+
+                        if match_name and len(extracted_odds) >= 2:
                             if match_name not in live_matches_cache:
                                 live_matches_cache[match_name] = {}
                             
-                            # Storing float odds along with the direct bookmaker link
                             bm_link = bookmaker_urls.get(bm, "https://google.com")
                             live_matches_cache[match_name][bm] = {
-                                "prices": [float(odds_list[0]), float(odds_list[1])],
+                                "prices": [extracted_odds[0], extracted_odds[1]],
                                 "link": bm_link
                             }
         except Exception as e:
@@ -113,10 +123,6 @@ def fetch_odds_from_bookmakers(sport, market, status):
     return live_matches_cache
 
 def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionary):
-    """
-    Calculates exact arbitrage math (<100% Implied Probability) 
-    and sends detailed instant alerts with direct links.
-    """
     if len(odds_dictionary) < 2:
         return
 
@@ -154,11 +160,7 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
                     return
                 sent_alerts.add(alert_id)
 
-            # Distinct signals for LIVE vs PRE-MATCH (Upcoming)
-            if status == "LIVE":
-                status_tag = "🔴 *LIVE SURE BET SIGNAL (IN-PLAY)*"
-            else:
-                status_tag = "⏳ *PRE-MATCH / UPCOMING SURE BET SIGNAL*"
+            status_tag = "🔴 *LIVE SURE BET SIGNAL (IN-PLAY)*" if status == "LIVE" else "⏳ *PRE-MATCH / UPCOMING SURE BET SIGNAL*"
             
             message = (
                 f"🚨 *100% PROFITABLE ARBITRAGE FOUND!* 🚨\n\n"
@@ -175,7 +177,7 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Full-Fledged Multi-Sport Multi-Market Arbitrage Scanner is Running 24/7!"
+    return "Targeted Indian Bookmakers Arbitrage Scanner is Running 24/7!"
 
 def background_worker():
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
@@ -190,11 +192,11 @@ def background_worker():
                         live_cache = fetch_odds_from_bookmakers(sport, market, status)
                         for match_name, odds_dict in live_cache.items():
                             evaluate_surebet_and_alert(match_name, sport, market, status, odds_dict)
-                        time.sleep(1)
+                        time.sleep(0.5)
         except Exception as e:
             print(f"Background Loop Error: {e}")
             
-        time.sleep(10)
+        time.sleep(5)
 
 if __name__ == '__main__':
     t = threading.Thread(target=background_worker, daemon=True)
