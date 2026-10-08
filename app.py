@@ -9,8 +9,8 @@ app = Flask(__name__)
 API_KEY = "1f05a6b3d359e7a23fdca322cb0f3007"
 TARGET_BOOKMAKERS = ["1xbet", "parimatch", "pinnacle", "stake"]
 
-# Naya Revoked Telegram Bot Token aur Chat ID
-TELEGRAM_BOT_TOKEN = "8001955184:AAFKUnk0mrCkkdtHTk3c1g-SMzaXjgAdVMY"
+# Naya Sahi Telegram Bot Token aur Chat ID
+TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5292908963"
 
 def send_telegram_alert(message):
@@ -24,35 +24,32 @@ def send_telegram_alert(message):
         }
         response = requests.post(url, json=payload, timeout=10)
         print(f"Telegram Response Status: {response.status_code}")
+        print(f"Telegram Response Body: {response.text}")
     except Exception as e:
         print(f"Telegram Error: {e}")
 
 def check_market_arbitrage(outcomes, market_name, match_title, sport_key):
-    """Generic function to find arbitrage across any 2-way or multi-way outcomes"""
     if len(outcomes) < 2:
         return
         
-    # Simple 2-outcome market check (jaise H2H ya Over/Under)
     best_outcomes = {}
     for outcome in outcomes:
         name = outcome.get('name')
         price = outcome.get('price', 0)
-        point = outcome.get('point', '') # Handicaps ya Totals ke liye point (jaise Over 2.5)
+        point = outcome.get('point', '')
         
         key = f"{name}_{point}"
         if key not in best_outcomes or price > best_outcomes[key]['price']:
             best_outcomes[key] = {'price': price, 'bookmaker': outcome.get('bookmaker', '')}
 
-    # Agar 2 ya zyada outcomes hain toh arb check karo
     if len(best_outcomes) >= 2:
         prices = [v['price'] for v in best_outcomes.values()]
         implied_prob = sum(1/p for p in prices if p > 0)
         
         if implied_prob > 0 and implied_prob < 1:
-            profit_margin = (1 - implied_probability) * 100 if 'implied_probability' in locals() else (1 - implied_prob) * 100
+            profit_margin = (1 - implied_prob) * 100
             
-            # Format alert message
-            details = "\n".join([f"👉 *{k}:* `{v['price']}`" for k, v in best_outcomes.items()])
+            details = "\n".join([f"👉 *{k}:* `{v['price']}` ({v['bookmaker'].upper()})" for k, v in best_outcomes.items()])
             alert_msg = (
                 f"🔥 *SUREBET FOUND! ({market_name.upper()})* 🔥\n\n"
                 f"🏆 *Sport:* {sport_key.upper()}\n"
@@ -79,7 +76,6 @@ def scan_all_sports():
                 active_sports = [s['key'] for s in sports_data if s.get('active', False)]
                 print(f"Total Active Sports Found: {len(active_sports)}")
                 
-                # Sabhi major markets target kar rahe hain: H2H, Spreads (Handicap), Totals (Over/Under)
                 markets_to_scan = "h2h,spreads,totals"
                 
                 for sport_key in active_sports:
@@ -100,8 +96,7 @@ def scan_all_sports():
                                 match_title = f"{match.get('home_team')} vs {match.get('away_team')}"
                                 bookmakers_data = match.get('bookmakers', [])
                                 
-                                # Market wise data collect karna
-                                market_outcomes_map = {'h2h': {}, 'spreads': {}, 'totals': {}}
+                                market_outcomes_map = {'h2h': [], 'spreads': [], 'totals': []}
                                 
                                 for bm in bookmakers_data:
                                     bm_key = bm['key']
@@ -111,22 +106,11 @@ def scan_all_sports():
                                             if m_key in market_outcomes_map:
                                                 for outcome in m.get('outcomes', []):
                                                     outcome['bookmaker'] = bm_key
-                                                    # Grouping by point if totals/spreads exist
-                                                    market_outcomes_map[m_key].setdefault(str(outcome.get('point', '')), []).append(outcome)
+                                                    market_outcomes_map[m_key].append(outcome)
 
-                                # Check arbitrage for each market type
-                                for market_type, points_dict in market_outcomes_map.items():
-                                    for point_val, outcomes_list in points_dict.items():
-                                        # Group by bookmaker to find best odds across bookies
-                                        bm_best = {}
-                                        for out in outcomes_list:
-                                            bm = out['bookmaker']
-                                            # Simple check for multi-bookmaker availability
-                                            pass
-                                                
-                                        # Fast arbitrage calculation across target bookmakers
-                                        if len(outcomes_list) >= 2:
-                                            check_market_arbitrage(outcomes_list, market_type, match_title, sport_key)
+                                for market_type, outcomes_list in market_outcomes_map.items():
+                                    if len(outcomes_list) >= 2:
+                                        check_market_arbitrage(outcomes_list, market_type, match_title, sport_key)
                                             
                         time.sleep(0.3)
                     except Exception:
