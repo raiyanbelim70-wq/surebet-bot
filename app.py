@@ -14,7 +14,7 @@ TELEGRAM_BOT_TOKEN = "8001955184:AAFs9js7ilyVYFsXMQuepSwBbXAQzZRMbw"
 TELEGRAM_CHAT_ID = "5292908963"
 
 def send_telegram_alert(message):
-    """Telegram par alert bhejne ka function"""
+    """Telegram par alert bhejne ka function aur response check karne ke liye"""
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
@@ -23,7 +23,8 @@ def send_telegram_alert(message):
             "parse_mode": "Markdown"
         }
         response = requests.post(url, json=payload, timeout=10)
-        print(f"Telegram Response: {response.status_code} - {response.text}")
+        print(f"Telegram Response Status: {response.status_code}")
+        print(f"Telegram Response Body: {response.text}")
     except Exception as e:
         print(f"Telegram Error: {e}")
 
@@ -54,7 +55,8 @@ def calculate_surebet(odds_list):
     return False, 0, "", 0, "", 0
 
 def scan_all_sports():
-    time.sleep(5)  # Thoda wait karte hain taaki server fully stable ho jaye
+    print("Background scanner started...")
+    time.sleep(5)
     send_telegram_alert("🚀 *Surebet Scanner Bot is Live & Scanning!* (1xBet, Parimatch, Pinnacle, Stake)")
     
     while True:
@@ -120,11 +122,9 @@ def scan_all_sports():
         print("--- Scan Cycle Completed. Restarting in 60 seconds ---")
         time.sleep(60)
 
-def start_background_scanner():
-    thread = threading.Thread(target=scan_all_sports, daemon=True)
-    thread.start()
-
-start_background_scanner()
+# Thread ko start karne ka safe tareeka
+scanner_thread = threading.Thread(target=scan_all_sports, daemon=True)
+scanner_thread.start()
 
 @app.route('/')
 def home():
@@ -133,5 +133,5 @@ def home():
 @app.route('/test-telegram')
 def test_telegram():
     send_telegram_alert("🧪 *Test Alert:* Telegram integration is working perfectly!")
-    return "Test message sent to Telegram!"
+    return "Test message sent to Telegram! Check logs for response status."
     
