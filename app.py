@@ -9,6 +9,23 @@ app = Flask(__name__)
 API_KEY = "1f05a6b3d359e7a23fdca322cb0f3007"
 TARGET_BOOKMAKERS = ["1xbet", "parimatch", "pinnacle", "stake"]
 
+# Telegram Credentials
+TELEGRAM_BOT_TOKEN = "8001955184:AAFs9js7ilyVYFsXMQuepSwBbXAQzZRMbw"
+TELEGRAM_CHAT_ID = "5292908963"
+
+def send_telegram_alert(message):
+    """Telegram par alert bhejne ka function"""
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Telegram Error: {e}")
+
 def calculate_surebet(odds_list):
     best_home_odd = 0
     best_away_odd = 0
@@ -36,6 +53,9 @@ def calculate_surebet(odds_list):
     return False, 0, "", 0, "", 0
 
 def scan_all_sports():
+    # Bot start hone ka notification Telegram par bhej do
+    send_telegram_alert("🚀 *Surebet Scanner Bot is Live & Scanning!* (1xBet, Parimatch, Pinnacle, Stake)")
+    
     while True:
         print("\n--- Starting Full Speed Multi-Sport Scan ---")
         try:
@@ -76,7 +96,16 @@ def scan_all_sports():
                                 if len(odds_dict) >= 2:
                                     is_sure, profit, bm1, odd1, bm2, odd2 = calculate_surebet(odds_dict)
                                     if is_sure:
-                                        print(f"🔥 SUREBET FOUND! [{sport_key.upper()}] {match_title} | Profit: {profit:.2f}% | {bm1} ({odd1}) vs {bm2} ({odd2})")
+                                        alert_msg = (
+                                            f"🔥 *SUREBET FOUND!* 🔥\n\n"
+                                            f"🏆 *Sport:* {sport_key.upper()}\n"
+                                            f"⚔️ *Match:* {match_title}\n"
+                                            f"💰 *Profit:* `{profit:.2f}%`\n\n"
+                                            f"👉 *Bet 1:* {bm1.upper()} ({odd1})\n"
+                                            f"👉 *Bet 2:* {bm2.upper()} ({odd2})"
+                                        )
+                                        print(alert_msg)
+                                        send_telegram_alert(alert_msg)
                                         
                         time.sleep(0.5)
                     except Exception:
@@ -98,5 +127,5 @@ start_background_scanner()
 
 @app.route('/')
 def home():
-    return "🚀 Full-Speed 4-Bookmaker Surebet Scanner is Live and Running!"
+    return "🚀 Full-Speed Telegram Surebet Scanner is Live and Running!"
     
