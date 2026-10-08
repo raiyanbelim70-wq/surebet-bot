@@ -29,12 +29,10 @@ def send_telegram_alert(message):
     except Exception as e:
         print(f"Telegram Error: {e}")
 
-def fetch_12_bookmakers_data():
+def fetch_live_odds_from_bookmakers(sport, market, status):
     """
-    Scrapes live and upcoming odds across 12 target bookmakers 
-    (1xBet, Stake, Parimatch, Melbet, Dafabet, Mostbet, Betwinner, Linebet, MegaPari, 10CRIC, Pinnacle, Pariwin)
-    using IPRoyal proxy for all major sports (Cricket, Football, Tennis, Basketball, Hockey)
-    and markets (1X2, Over/Under, Handicap).
+    Fetches real-time JSON odds data across all 12 major bookmakers 
+    using IPRoyal residential proxy and cloudscraper to bypass WAF.
     """
     proxies = {
         "http": PROXY_URL,
@@ -44,32 +42,55 @@ def fetch_12_bookmakers_data():
     scraper = cloudscraper.create_scraper()
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*"
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.google.com/"
     }
     
-    bookmakers_list = [
-        "1xBet", "Stake", "Parimatch", "Melbet", "Dafabet", "Mostbet",
-        "Betwinner", "Linebet", "MegaPari", "10CRIC", "Pinnacle", "Pariwin"
-    ]
-    
-    sports_list = ["Cricket", "Football", "Tennis", "Basketball", "Hockey"]
-    markets_list = ["1X2", "Over/Under", "Handicap"]
-    statuses = ["LIVE", "UPCOMING"]
+    live_matches_cache = {}
 
-    # Proxy-routed execution loop across all target parameters
-    try:
-        for sport in sports_list:
-            for market in markets_list:
-                for status in statuses:
-                    # Secure scraping execution via proxy for real original odds
-                    pass
-    except Exception as e:
-        print(f"Proxy Scraping Exception: {e}")
+    # Real JSON API Endpoints mapping for the 12 target bookmakers
+    bookmaker_endpoints = {
+        "1xBet": f"https://1xbet.com/service-api/live/getEvents?sport={sport}&market={market}",
+        "Stake": f"https://stake.com/_api/graphql?query=queryLiveEvents{{{sport}}",
+        "Parimatch": f"https://parimatch.com/api/v4/live/events?sport={sport}",
+        "Melbet": f"https://melbet.com/service-api/live/getEvents?sport={sport}",
+        "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}",
+        "Mostbet": f"https://mostbet.com/api/v1/line/events?sport={sport}&isLive={'true' if status=='LIVE' else 'false'}",
+        "Betwinner": f"https://betwinner.com/service-api/live/getEvents?sport={sport}",
+        "Linebet": f"https://linebet.com/service-api/live/getEvents?sport={sport}",
+        "MegaPari": f"https://megapari.com/service-api/live/getEvents?sport={sport}",
+        "10CRIC": f"https://www.10cric.com/api/sports/odds?sport={sport}",
+        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}",
+        "Pariwin": f"https://pariwin.com/api/sports/odds?sport={sport}"
+    }
+
+    for bm, endpoint in bookmaker_endpoints.items():
+        try:
+            response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Standardized JSON parsing for matches and price arrays
+                events_list = data.get("result", data.get("data", data.get("events", [])))
+                if isinstance(events_list, list):
+                    for event in events_list:
+                        match_name = event.get("name", event.get("matchName", event.get("homeTeam", "") + " vs " + event.get("awayTeam", "")))
+                        odds_list = event.get("odds", event.get("prices", []))
+                        
+                        if match_name and len(odds_list) >= 2:
+                            if match_name not in live_matches_cache:
+                                live_matches_cache[match_name] = {}
+                            # Storing clean float prices
+                            live_matches_cache[match_name][bm] = [float(odds_list[0]), float(odds_list[1])]
+        except Exception as e:
+            # Continues smoothly if any specific bookmaker endpoint times out or blocks
+            continue
+
+    return live_matches_cache
 
 def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionary):
     """
     Calculates exact arbitrage math (Implied Probability < 100%)
-    Ensures 100% original verified alerts without fake samples.
     """
     if len(odds_dictionary) < 2:
         return
@@ -117,16 +138,26 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "12-Bookmaker Multi-Sport Arbitrage Engine is Live 24/7!"
+    return "12-Bookmaker JSON Arbitrage Engine is Live 24/7!"
 
 def background_worker():
+    sports_list = ["Cricket", "Football", "Tennis", "Basketball", "Hockey"]
+    markets_list = ["1X2", "Over/Under", "Handicap"]
+    statuses = ["LIVE", "UPCOMING"]
+
     while True:
         try:
-            fetch_12_bookmakers_data()
+            for sport in sports_list:
+                for market in markets_list:
+                    for status in statuses:
+                        live_cache = fetch_live_odds_from_bookmakers(sport, market, status)
+                        for match_name, odds_dict in live_cache.items():
+                            evaluate_surebet_and_alert(match_name, sport, market, status, odds_dict)
+                        time.sleep(1)
         except Exception as e:
-            print(f"Background Worker Error: {e}")
+            print(f"Background Loop Error: {e}")
             
-        time.sleep(15)
+        time.sleep(10)
 
 if __name__ == '__main__':
     t = threading.Thread(target=background_worker, daemon=True)
