@@ -10,9 +10,6 @@ API_KEY = "1f05a6b3d359e7a23fdca322cb0f3007"
 TARGET_BOOKMAKERS = ["1xbet", "parimatch", "pinnacle", "stake"]
 
 def calculate_surebet(odds_list):
-    """Arbitrage/Surebet calculation logic"""
-    # odds_list mein har bookmaker ke outcomes honge
-    # Formula: (1 / odds1) + (1 / odds2) < 1 means surebet exists
     best_home_odd = 0
     best_away_odd = 0
     best_home_bm = ""
@@ -20,9 +17,7 @@ def calculate_surebet(odds_list):
     
     for bm, outcomes in odds_list.items():
         if len(outcomes) >= 2:
-            # Home win odd
             home_odd = outcomes[0].get('price', 0)
-            # Away win odd
             away_odd = outcomes[1].get('price', 0)
             
             if home_odd > best_home_odd:
@@ -41,12 +36,10 @@ def calculate_surebet(odds_list):
     return False, 0, "", 0, "", 0
 
 def scan_all_sports():
-    """Saare active sports aur unke matches ko fast scan karne ka loop"""
     while True:
         print("\n--- Starting Full Speed Multi-Sport Scan ---")
         try:
-            # Step 1: Sabhi active sports ki list fetch karo
-            sports_url = f"https://api.the-odds-api.com/v4/sports/"
+            sports_url = "https://api.the-odds-api.com/v4/sports/"
             sports_response = requests.get(sports_url, params={'api_key': API_KEY}, timeout=15)
             
             if sports_response.status_code == 200:
@@ -54,7 +47,6 @@ def scan_all_sports():
                 active_sports = [s['key'] for s in sports_data if s.get('active', False)]
                 print(f"Total Active Sports Found: {len(active_sports)}")
                 
-                # Step 2: Har active sport ke odds fetch karo
                 for sport_key in active_sports:
                     odds_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
                     params = {
@@ -81,14 +73,13 @@ def scan_all_sports():
                                             if m['key'] == 'h2h':
                                                 odds_dict[bm_key] = m.get('outcomes', [])
                                                 
-                                # Surebet check karo
                                 if len(odds_dict) >= 2:
                                     is_sure, profit, bm1, odd1, bm2, odd2 = calculate_surebet(odds_dict)
                                     if is_sure:
                                         print(f"🔥 SUREBET FOUND! [{sport_key.upper()}] {match_title} | Profit: {profit:.2f}% | {bm1} ({odd1}) vs {bm2} ({odd2})")
                                         
-                        time.sleep(0.5) # API rate limit bachane ke liye chota sa pause
-                    except Exception as inner_e:
+                        time.sleep(0.5)
+                    except Exception:
                         continue
             else:
                 print(f"Error fetching sports list: {sports_response.status_code}")
@@ -108,8 +99,4 @@ start_background_scanner()
 @app.route('/')
 def home():
     return "🚀 Full-Speed 4-Bookmaker Surebet Scanner is Live and Running!"
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
-                                
+    
