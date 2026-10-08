@@ -50,10 +50,13 @@ def fetch_odds_from_bookmakers(sport, market, status):
     live_matches_cache = {}
     type_path = "live" if status == "LIVE" else "line"
 
+    # Stake query safely structured to avoid any Python f-string curly brace syntax errors
+    stake_query = "query" + status.capitalize() + "Events{" + sport + "}"
+
     # Comprehensive Bookmaker API Endpoints mapping for all sports & markets
     bookmaker_endpoints = {
         "1xBet": f"https://1xbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Stake": f"https://stake.com/_api/graphql?query=query{status.capitalize()}Events%7B{sport}%7D",
+        "Stake": f"https://stake.com/_api/graphql?query={stake_query}",
         "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
         "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
