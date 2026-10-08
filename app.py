@@ -48,10 +48,10 @@ def fetch_live_odds_from_bookmakers(sport, market, status):
     
     live_matches_cache = {}
 
-    # Real JSON API Endpoints mapping for the 12 target bookmakers
+    # Real JSON API Endpoints mapping (Stake syntax error fully fixed here)
     bookmaker_endpoints = {
         "1xBet": f"https://1xbet.com/service-api/live/getEvents?sport={sport}&market={market}",
-        "Stake": f"https://stake.com/_api/graphql?query=queryLiveEvents{{{sport}}",
+        "Stake": "https://stake.com/_api/graphql?query=queryLiveEvents%7B" + sport + "%7D",
         "Parimatch": f"https://parimatch.com/api/v4/live/events?sport={sport}",
         "Melbet": f"https://melbet.com/service-api/live/getEvents?sport={sport}",
         "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}",
