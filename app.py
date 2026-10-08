@@ -32,9 +32,6 @@ def send_telegram_alert(message):
         print(f"Telegram Error: {e}")
 
 def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
-    """
-    Fetches data concurrently using proxy/cloudscraper with deep flexible JSON parsing.
-    """
     proxies = {
         "http": PROXY_URL,
         "https": PROXY_URL
@@ -50,10 +47,10 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
     bookie_results = {}
     try:
         response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
+        print(f"[{bm}] Status Code: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
             
-            # Deep flexible extraction for complex JSON structures (1xBet, Stake, etc.)
             events_list = []
             if isinstance(data, dict):
                 events_list = data.get("result", data.get("data", data.get("events", data.get("Value", []))))
@@ -87,49 +84,31 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
                             "link": bm_link
                         }
     except Exception as e:
-        pass
+        print(f"[{bm}] Error: {e}")
         
     return bm, bookie_results
 
 def fetch_odds_from_bookmakers(sport, market, status):
-    """
-    Scans all 12 bookmakers simultaneously in parallel threads for maximum speed.
-    """
     live_matches_cache = {}
     type_path = "live" if status == "LIVE" else "line"
     stake_query = "query" + status.capitalize() + "Events{" + sport + "}"
 
+    # Only 4 core bookmakers focused on India
     bookmaker_endpoints = {
         "1xBet": f"https://1xbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Stake": f"https://stake.com/_api/graphql?query={stake_query}",
         "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
-        "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
-        "Mostbet": f"https://mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
-        "Betwinner": f"https://betwinner.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Linebet": f"https://linebet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "MegaPari": f"https://megapari.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "10CRIC": f"https://www.10cric.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
         "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}",
-        "Pariwin": f"https://pariwin.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}"
+        "Stake": f"https://stake.com/_api/graphql?query={stake_query}"
     }
 
     bookmaker_urls = {
         "1xBet": "https://1xbet.com",
-        "Stake": "https://stake.com",
         "Parimatch": "https://parimatch.com",
-        "Melbet": "https://melbet.com",
-        "Dafabet": "https://www.dafabet.com",
-        "Mostbet": "https://mostbet.com",
-        "Betwinner": "https://betwinner.com",
-        "Linebet": "https://linebet.com",
-        "MegaPari": "https://megapari.com",
-        "10CRIC": "https://www.10cric.com",
         "Pinnacle": "https://www.pinnacle.com",
-        "Pariwin": "https://pariwin.com"
+        "Stake": "https://stake.com"
     }
 
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {
             executor.submit(fetch_single_bookmaker, bm, endpoint, bookmaker_urls): bm 
             for bm, endpoint in bookmaker_endpoints.items()
@@ -194,11 +173,11 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Ultimate Multi-Threaded Arbitrage Scanner is Running 24/7!"
+    return "Targeted 4-Bookmaker Arbitrage Scanner is Running 24/7!"
 
 def background_worker():
-    sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
-    markets_list = ["1X2", "Over/Under", "Handicap", "Totals"]
+    sports_list = ["Cricket", "Football", "Soccer", "Tennis"]
+    markets_list = ["1X2", "Over/Under"]
     statuses = ["LIVE", "UPCOMING"]
 
     while True:
