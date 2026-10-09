@@ -8,11 +8,9 @@ from flask import Flask
 
 app = Flask(__name__)
 
-# Telegram Configuration
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5232960693"
 
-# IPRoyal Proxy Configuration (Cleaned with .strip() to remove trailing newlines/spaces)
 raw_proxy = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
 PROXY_URL = raw_proxy.strip() if raw_proxy else None
 
@@ -48,11 +46,18 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
     
     bookie_results = {}
     try:
-        response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
+        # Added verify=False to bypass SSL cert issues
+        response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6, verify=False)
         print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}", flush=True)
         
         if response.status_code == 200:
-            data = response.json()
+            # Check if response is actually JSON before parsing
+            try:
+                data = response.json()
+            except Exception:
+                print(f"DEBUG Error -> {bm}: Response is not valid JSON (Cloudflare Block)", flush=True)
+                return bm, bookie_results
+
             events_list = []
             if isinstance(data, dict):
                 events_list = data.get("result", data.get("data", data.get("events", data.get("Value", []))))
@@ -190,7 +195,7 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Final Clean Arbitrage Scanner is Running 24/7!"
+    return "Arbitrage Scanner with SSL & JSON Error Fix is Running 24/7!"
 
 def background_worker():
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
