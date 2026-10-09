@@ -8,7 +8,7 @@ from flask import Flask
 
 app = Flask(__name__)
 
-# Updated Telegram Bot Configuration
+# Telegram Configuration
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5232960693"
 
@@ -29,7 +29,7 @@ def send_telegram_alert(message):
     try:
         requests.post(url, json=payload, timeout=10)
     except Exception as e:
-        print(f"Telegram Error: {e}")
+        print(f"Telegram Error: {e}", flush=True)
 
 def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
     proxies = {
@@ -48,7 +48,8 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
     bookie_results = {}
     try:
         response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
-        print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}")
+        # flush=True ensures logs print instantly on Render without buffering delay
+        print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}", flush=True)
         
         if response.status_code == 200:
             data = response.json()
@@ -85,7 +86,7 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
                             "link": bm_link
                         }
     except Exception as e:
-        print(f"DEBUG Error -> {bm}: {e}")
+        print(f"DEBUG Error -> {bm}: {e}", flush=True)
         
     return bm, bookie_results
 
@@ -100,7 +101,7 @@ def fetch_odds_from_bookmakers(sport, market, status):
         "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
         "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
-        "Mostbet": f"mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
+        "Mostbet": f"https://mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
         "Betwinner": f"https://betwinner.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Linebet": f"https://linebet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "MegaPari": f"https://megapari.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
@@ -189,12 +190,14 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Arbitrage Scanner with Gunicorn Worker Fix is Running 24/7!"
+    return "Final High-Speed Arbitrage Scanner is Running 24/7!"
 
 def background_worker():
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
     markets_list = ["1X2", "Over/Under", "Handicap", "Totals"]
     statuses = ["LIVE", "UPCOMING"]
+
+    print("Background worker thread started successfully!", flush=True)
 
     while True:
         try:
@@ -205,11 +208,11 @@ def background_worker():
                         for match_name, odds_dict in live_cache.items():
                             evaluate_surebet_and_alert(match_name, sport, market, status, odds_dict)
         except Exception as e:
-            print(f"Background Loop Error: {e}")
+            print(f"Background Loop Error: {e}", flush=True)
             
         time.sleep(2)
 
-# Start background worker immediately on import so Gunicorn runs it automatically
+# Start background worker immediately for Gunicorn compatibility
 t = threading.Thread(target=background_worker, daemon=True)
 t.start()
 
