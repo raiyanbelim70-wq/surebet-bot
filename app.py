@@ -16,6 +16,9 @@ proxies = {
     "https": PROXY_URL
 }
 
+# Yaad rakhne ke liye cache taaki same match repeat na ho
+sent_alerts_cache = set()
+
 def send_telegram_alert(message):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print("Telegram tokens missing!")
@@ -37,9 +40,10 @@ def fetch_and_scan_odds():
     try:
         print("Scanning active markets via Bright Data ISP Proxy & curl_cffi...")
         
-        # Professional match dataset jo bilkul second image ke format jaisa dikhega
+        # Alag-alag matches ki list
         sports_data = [
             {
+                "id": "match_1",
                 "sport": "Soccer",
                 "league": "Italy. Serie A",
                 "event": "Atalanta - Venezia [Regular time]",
@@ -49,6 +53,7 @@ def fetch_and_scan_odds():
                 "profit": 2.07
             },
             {
+                "id": "match_2",
                 "sport": "Basketball",
                 "league": "Slovenia. SKL",
                 "event": "KK Sencur - Hopsi Polzela [Full time with overtimes]",
@@ -58,6 +63,7 @@ def fetch_and_scan_odds():
                 "profit": 2.69
             },
             {
+                "id": "match_3",
                 "sport": "Soccer",
                 "league": "English Premier League",
                 "event": "Arsenal - Chelsea [Total Goals Over/Under]",
@@ -68,8 +74,18 @@ def fetch_and_scan_odds():
             }
         ]
         
-        # Har baar ek naya match random pick hoga taaki spam na ho aur alag alert mile
-        match = random.choice(sports_data)
+        # Woh matches filter karo jo abhi tak Telegram par nahi bheje gaye hain
+        available_matches = [m for m in sports_data if m["id"] not in sent_alerts_cache]
+        
+        # Agar saare matches bhej diye hain, toh cache reset kar do taaki cycle phir se chale
+        if not available_matches:
+            sent_alerts_cache.clear()
+            available_matches = sports_data
+            
+        match = random.choice(available_matches)
+        
+        # Is match ko cache mein daal do taaki ye repeat na ho
+        sent_alerts_cache.add(match["id"])
         
         alert_text = (
             f"💰 **New surebet found!**\n"
@@ -97,7 +113,7 @@ def background_scanner():
     while True:
         try:
             fetch_and_scan_odds()
-            time.sleep(45)  # Har 45 seconds me ek fresh aur mast alert aayega
+            time.sleep(45)
         except Exception as e:
             print(f"Scanner loop error: {e}")
             time.sleep(45)
