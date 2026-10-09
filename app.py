@@ -12,8 +12,9 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5232960693"
 
-# IPRoyal Proxy Configuration
-PROXY_URL = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
+# IPRoyal Proxy Configuration (Cleaned with .strip() to remove trailing newlines/spaces)
+raw_proxy = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
+PROXY_URL = raw_proxy.strip() if raw_proxy else None
 
 sent_alerts = set()
 alert_lock = threading.Lock()
@@ -48,7 +49,6 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
     bookie_results = {}
     try:
         response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
-        # flush=True ensures logs print instantly on Render without buffering delay
         print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}", flush=True)
         
         if response.status_code == 200:
@@ -190,7 +190,7 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Final High-Speed Arbitrage Scanner is Running 24/7!"
+    return "Final Clean Arbitrage Scanner is Running 24/7!"
 
 def background_worker():
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
@@ -212,7 +212,6 @@ def background_worker():
             
         time.sleep(2)
 
-# Start background worker immediately for Gunicorn compatibility
 t = threading.Thread(target=background_worker, daemon=True)
 t.start()
 
