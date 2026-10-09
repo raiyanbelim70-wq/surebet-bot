@@ -12,7 +12,7 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5232960693"
 
-# IPRoyal Proxy Configuration (Cleaned with .strip() to remove trailing newlines/spaces)
+# IPRoyal Proxy Configuration (Cleaned with .strip())
 raw_proxy = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
 PROXY_URL = raw_proxy.strip() if raw_proxy else None
 
@@ -40,7 +40,6 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
     
     bookie_results = {}
     try:
-        # Isolated scraper instance per bookmaker to prevent cross-contamination
         scraper = cloudscraper.create_scraper(browser={'custom': 'ScraperBot/1.0'})
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -56,7 +55,7 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
             try:
                 data = response.json()
             except Exception:
-                print(f"DEBUG Error -> {bm}: Blocked by Cloudflare (HTML response instead of JSON)", flush=True)
+                print(f"DEBUG Error -> {bm}: Blocked by Cloudflare (HTML response)", flush=True)
                 return bm, bookie_results
 
             events_list = []
@@ -95,7 +94,6 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
             print(f"DEBUG Error -> {bm}: HTTP Status {response.status_code}", flush=True)
             
     except Exception as e:
-        # Safely catch SSL, proxy timeout, or connection errors without crashing the thread pool
         print(f"DEBUG Error -> {bm}: {str(e)}", flush=True)
         
     return bm, bookie_results
@@ -103,39 +101,18 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
 def fetch_odds_from_bookmakers(sport, market, status):
     live_matches_cache = {}
     type_path = "live" if status == "LIVE" else "line"
-    stake_query = "query" + status.capitalize() + "Events{" + sport + "}"
 
     bookmaker_endpoints = {
         "1xBet": f"https://1xbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Stake": f"https://stake.com/_api/graphql?query={stake_query}",
-        "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
-        "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
-        "Mostbet": f"https://mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
-        "Betwinner": f"https://betwinner.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Linebet": f"https://linebet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "MegaPari": f"https://megapari.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "10CRIC": f"https://www.10cric.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
-        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}",
-        "Pariwin": f"https://pariwin.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}"
+        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}"
     }
 
     bookmaker_urls = {
         "1xBet": "https://1xbet.com",
-        "Stake": "https://stake.com",
-        "Parimatch": "https://parimatch.com",
-        "Melbet": "https://melbet.com",
-        "Dafabet": "https://www.dafabet.com",
-        "Mostbet": "https://mostbet.com",
-        "Betwinner": "https://betwinner.com",
-        "Linebet": "https://linebet.com",
-        "MegaPari": "https://megapari.com",
-        "10CRIC": "https://www.10cric.com",
-        "Pinnacle": "https://www.pinnacle.com",
-        "Pariwin": "https://pariwin.com"
+        "Pinnacle": "https://www.pinnacle.com"
     }
 
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
             executor.submit(fetch_single_bookmaker, bm, endpoint, bookmaker_urls): bm 
             for bm, endpoint in bookmaker_endpoints.items()
@@ -203,14 +180,17 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Bulletproof Arbitrage Scanner is Running 24/7!"
+    return "1xBet & Pinnacle Focused Arbitrage Scanner is Running!"
 
 def background_worker():
+    # Send startup message to Telegram when worker boots up
+    startup_msg = "🟢 *Arbitrage Scanner Started Successfully!*\n\nMonitoring Bookmakers: `1xBet`, `Pinnacle`"
+    send_telegram_alert(startup_msg)
+    print("Background worker started & startup notification sent!", flush=True)
+
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
     markets_list = ["1X2", "Over/Under", "Handicap", "Totals"]
     statuses = ["LIVE", "UPCOMING"]
-
-    print("Background worker thread started successfully and running stable!", flush=True)
 
     while True:
         try:
