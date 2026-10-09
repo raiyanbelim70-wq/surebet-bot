@@ -41,62 +41,29 @@ def send_telegram_alert(message):
 
 def fetch_and_scan_odds():
     try:
-        print("Fetching 1xBet & Pinnacle odds via Bright Data ISP Proxy...")
+        print("Fetching live & upcoming odds via Bright Data ISP Proxy...")
         
-        # 1xBet Request using ISP Proxy
-        # Yahan 1xBet ki mobile API ya endpoint hit ho rahi hai proxy ke sath
-        url_1xbet = "https://1xbet.com/service-api/..." 
+        # 1xBet Request (ISP Proxy ke zariye WAF 403 bypass hoga)
+        # url_1xbet = "https://1xbet.com/service-api/..."
         # resp_1xbet = requests.get(url_1xbet, headers=headers, proxies=proxies, timeout=10)
         
-        # Pinnacle Request using ISP Proxy
-        # Yahan Pinnacle ki API ya endpoint hit ho rahi hai proxy ke sath
-        url_pinnacle = "https://api.pinnacle.com/..." 
+        # Pinnacle Request (ISP Proxy ke zariye Geo-block 451 bypass hoga)
+        # url_pinnacle = "https://api.pinnacle.com/..."
         # resp_pinnacle = requests.get(url_pinnacle, headers=headers, proxies=proxies, timeout=10)
         
-        # Mocking arbitrage detection logic for testing alerts:
-        # Jab odds milenge aur surebet calculate hogi, tab yeh chalega:
-        surebet_found = False
+        # --- Total, Handicap, Over/Under Arbitrage Logic ---
+        surebet_found = False  # Jab yahan calculation match karegi
+        
         if surebet_found:
             alert_text = (
                 "🚨 **SureBet Alert Found!** 🚨\n\n"
-                "⚽ **Match:** Team A vs Team B\n"
-                "📊 **Market:** Total / Handicap / O/U\n"
-                "🔥 **1xBet vs Pinnacle**\n"
-                "💰 **Profit:** +2.3%\n"
+                "⚽ **Match:** Team A vs Team B (Live / Upcoming)\n"
+                "📊 **Market:** Total / Handicap / Over-Under\n"
+                "🔥 **Bookmakers:** 1xBet vs Pinnacle\n"
+                "💰 **Profit Margin:** +2.5%\n"
                 "⚡ *Bypassed via Bright Data ISP Proxy*"
             )
             send_telegram_alert(alert_text)
             
-    except Exception as e:
-        print(f"Error during fetching odds with proxy: {e}")
-
-def background_scanner():
-    print("Arbitrage Scanner Background Loop Started!")
-    send_telegram_alert(
-        "🚀 **Arbitrage Scanner Fully Active!**\n\n"
-        "🔥 ISP Proxy (Bright Data) Connected.\n"
-        "🎯 WAF & Geo-blocks Successfully Bypassed.\n"
-        "⚡ Scanning Live & Upcoming markets (Total, Handicap, O/U)..."
-    )
-    
-    while True:
-        try:
-            fetch_and_scan_odds()
-            time.sleep(10)  # Scanning interval
-        except Exception as e:
-            print(f"Scanner loop error: {e}")
-            time.sleep(10)
-
-@app.route("/")
-def home():
-    return "Arbitrage Scanner Bot is Running Live with ISP Proxy!"
-
-if __name__ == "__main__":
-    # Background thread mein scanner chala rahe hain taaki Flask server active rahe
-    scanner_thread = threading.Thread(target=background_scanner)
-    scanner_thread.daemon = True
-    scanner_thread.start()
-    
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    except
     
