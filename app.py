@@ -3,7 +3,6 @@ import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
-import cloudscraper
 from flask import Flask
 
 app = Flask(__name__)
@@ -11,10 +10,6 @@ app = Flask(__name__)
 # Telegram Configuration
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5232960693"
-
-# IPRoyal Proxy Configuration (Cleaned with .strip())
-raw_proxy = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
-PROXY_URL = raw_proxy.strip() if raw_proxy else None
 
 sent_alerts = set()
 alert_lock = threading.Lock()
@@ -28,54 +23,49 @@ def send_telegram_alert(message):
         "disable_web_page_preview": True
     }
     try:
-        requests.post(url, json=payload, timeout=10)
+        # Direct network use for Telegram (No proxy needed)
+        requests.post(url, json=payload, proxies={"http": None, "https": None}, timeout=10)
     except Exception as e:
         print(f"Telegram Error: {e}", flush=True)
 
-def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
-    proxies = {
-        "http": PROXY_URL,
-        "https": PROXY_URL
-    } if PROXY_URL else None
-    
+def fetch_mobile_api(bm, endpoint, bookmaker_urls):
     bookie_results = {}
     try:
-        scraper = cloudscraper.create_scraper(browser={'custom': 'ScraperBot/1.0'})
+        # Mobile app headers to bypass browser-based WAF/Cloudflare
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Linux; Android 13; SM-S918B Build/TP1A.220624.014) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/112.0.5615.135 Mobile Safari/537.36 1xBetClient/15.0(4250)",
             "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://www.google.com/"
+            "Accept-Encoding": "gzip, deflate",
+            "X-Requested-With": "org.xbet.client",
+            "Connection": "keep-alive"
         }
         
-        response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
-        print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}", flush=True)
+        response = requests.get(endpoint, headers=headers, timeout=8)
+        print(f"DEBUG Mobile API -> Bookmaker: {bm} | Status Code: {response.status_code}", flush=True)
         
         if response.status_code == 200:
             try:
                 data = response.json()
             except Exception:
-                print(f"DEBUG Error -> {bm}: Blocked by Cloudflare (HTML response)", flush=True)
+                print(f"DEBUG Error -> {bm}: Non-JSON response received", flush=True)
                 return bm, bookie_results
 
             events_list = []
             if isinstance(data, dict):
-                events_list = data.get("result", data.get("data", data.get("events", data.get("Value", []))))
-                if not events_list and "sports" in data:
-                    events_list = data["sports"]
+                events_list = data.get("result", data.get("Value", data.get("data", [])))
             elif isinstance(data, list):
                 events_list = data
 
             if isinstance(events_list, list):
                 for event in events_list:
-                    match_name = event.get("name", event.get("matchName", event.get("homeTeam", "") + " vs " + event.get("awayTeam", "")))
-                    odds_list = event.get("odds", event.get("prices", event.get("markets", [])))
+                    match_name = event.get("name", event.get("matchName", event.get("C1", "") + " vs " + event.get("C2", "")))
+                    odds_list = event.get("odds", event.get("prices", event.get("E", [])))
                     
                     extracted_odds = []
                     if isinstance(odds_list, list) and len(odds_list) > 0:
                         for odd in odds_list:
                             if isinstance(odd, dict):
-                                val = odd.get("C", odd.get("price", odd.get("value", 0)))
+                                val = odd.get("C", odd.get("value", 0))
                                 try:
                                     if val: 
                                         extracted_odds.append(float(val))
@@ -98,13 +88,13 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
         
     return bm, bookie_results
 
-def fetch_odds_from_bookmakers(sport, market, status):
+def fetch_odds_from_bookmakers(sport, market):
     live_matches_cache = {}
-    type_path = "live" if status == "LIVE" else "line"
 
+    # Mobile API Endpoints (Direct JSON Gateways)
     bookmaker_endpoints = {
-        "1xBet": f"https://1xbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
-        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}"
+        "1xBet": f"https://1xbet.com/service-api/live/getEvents?sport={sport}&market={market}",
+        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}"
     }
 
     bookmaker_urls = {
@@ -114,7 +104,7 @@ def fetch_odds_from_bookmakers(sport, market, status):
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
-            executor.submit(fetch_single_bookmaker, bm, endpoint, bookmaker_urls): bm 
+            executor.submit(fetch_mobile_api, bm, endpoint, bookmaker_urls): bm 
             for bm, endpoint in bookmaker_endpoints.items()
         }
         
@@ -130,7 +120,7 @@ def fetch_odds_from_bookmakers(sport, market, status):
 
     return live_matches_cache
 
-def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionary):
+def evaluate_surebet_and_alert(match_name, sport, market, odds_dictionary):
     if len(odds_dictionary) < 2:
         return
 
@@ -162,50 +152,44 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
                 if alert_id in sent_alerts:
                     return
                 sent_alerts.add(alert_id)
-
-            status_tag = "🔴 *LIVE SURE BET SIGNAL (IN-PLAY)*" if status == "LIVE" else "⏳ *PRE-MATCH / UPCOMING SURE BET SIGNAL*"
             
             message = (
                 f"🚨 *100% PROFITABLE ARBITRAGE FOUND!* 🚨\n\n"
-                f"{status_tag}\n"
+                f"🔴 *LIVE SURE BET SIGNAL*\n"
                 f"🏆 *Sport:* {sport}\n"
                 f"⚔️ *Match:* {match_name}\n"
                 f"📊 *Market:* {market}\n"
                 f"💰 *Guaranteed Profit:* `{profit_percentage}%`\n\n"
                 f"👉 *Leg 1:* [{bookie_1}]({link_1}) @ **{best_odd_1}**\n"
                 f"👉 *Leg 2:* [{bookie_2}]({link_2}) @ **{best_odd_2}**\n\n"
-                f"🔥 *Click bookmaker names above to open site directly and place bets!*"
+                f"🔥 *Click bookmaker names above to open site directly!*"
             )
             send_telegram_alert(message)
 
 @app.route('/')
 def home():
-    return "1xBet & Pinnacle Focused Arbitrage Scanner is Running!"
+    return "Mobile API Emulated Arbitrage Scanner is Active!"
 
 def background_worker():
-    # Send startup message to Telegram when worker boots up
-    startup_msg = "🟢 *Arbitrage Scanner Started Successfully!*\n\nMonitoring Bookmakers: `1xBet`, `Pinnacle`"
+    startup_msg = "🟢 *Mobile API Scanner Started Successfully!*\n\nBypassing browser WAF using mobile client headers."
     send_telegram_alert(startup_msg)
-    print("Background worker started & startup notification sent!", flush=True)
+    print("Background worker started with mobile emulation!", flush=True)
 
-    sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
-    markets_list = ["1X2", "Over/Under", "Handicap", "Totals"]
-    statuses = ["LIVE", "UPCOMING"]
+    sports_list = ["Cricket", "Football", "Tennis", "Basketball"]
+    markets_list = ["1X2", "Totals"]
 
     while True:
         try:
             for sport in sports_list:
                 for market in markets_list:
-                    for status in statuses:
-                        live_cache = fetch_odds_from_bookmakers(sport, market, status)
-                        for match_name, odds_dict in live_cache.items():
-                            evaluate_surebet_and_alert(match_name, sport, market, status, odds_dict)
+                    live_cache = fetch_odds_from_bookmakers(sport, market)
+                    for match_name, odds_dict in live_cache.items():
+                        evaluate_surebet_and_alert(match_name, sport, market, odds_dict)
         except Exception as e:
             print(f"Background Loop Error: {e}", flush=True)
             
-        time.sleep(3)
+        time.sleep(5)
 
-# Start background worker immediately for Gunicorn compatibility
 t = threading.Thread(target=background_worker, daemon=True)
 t.start()
 
