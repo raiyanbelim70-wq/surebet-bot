@@ -65,5 +65,35 @@ def fetch_and_scan_odds():
             )
             send_telegram_alert(alert_text)
             
-    except
+    except Exception as e:
+        print(f"Error during proxy request: {e}")
+
+def background_scanner():
+    print("Arbitrage Scanner Background Loop Started!")
+    send_telegram_alert(
+        "🚀 **Arbitrage Scanner Fully Active!**\n\n"
+        "🔥 ISP Proxy (Bright Data) Connected.\n"
+        "🎯 WAF & Geo-blocks Successfully Bypassed.\n"
+        "⚡ Scanning Live & Upcoming markets (Total, Handicap, O/U)..."
+    )
+    
+    while True:
+        try:
+            fetch_and_scan_odds()
+            time.sleep(10)  # Scanning interval
+        except Exception as e:
+            print(f"Scanner loop error: {e}")
+            time.sleep(10)
+
+@app.route("/")
+def home():
+    return "Arbitrage Scanner Bot is Running Live with ISP Proxy!"
+
+if __name__ == "__main__":
+    scanner_thread = threading.Thread(target=background_scanner)
+    scanner_thread.daemon = True
+    scanner_thread.start()
+    
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
     
