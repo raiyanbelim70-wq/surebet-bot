@@ -1,23 +1,24 @@
 import os
 import time
 import threading
-import random
 from flask import Flask
-from curl_cffi import requests as curl_requests  # TLS impersonation ke liye zaroori
+from curl_cffi import requests as curl_requests
 import requests
 
 app = Flask(__name__)
 
+API_KEY = os.getenv("API_KEY", "1f05a6b3d359e7a23fdca322cb0f3007")
 PROXY_URL = os.getenv("PROXY_URL")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-proxies = {
+proxies_dict = {
     "http": PROXY_URL,
     "https": PROXY_URL
 }
 
-# Duplicate alerts rokne ke liye global cache
+# India-accessible bookmakers target list
+TARGET_BOOKMAKERS = ["1xbet", "parimatch", "pinnacle", "stake"]
 sent_alerts_cache = set()
 
 def send_telegram_alert(message):
@@ -31,100 +32,130 @@ def send_telegram_alert(message):
         "parse_mode": "Markdown"
     }
     try:
-        response = requests.post(url, json=payload, timeout=5)
+        response = requests.post(url, json=payload, timeout=8)
         if response.status_code != 200:
             print(f"Telegram error response: {response.text}")
     except Exception as e:
         print(f"Telegram connection error: {e}")
 
-def fetch_real_live_surebets():
+def calculate_arbitrage(outcomes_dict):
+    prices = [v['price'] for v in outcomes_dict.values()]
+    if len(prices) < 2:
+        return False, 0.0
+    
+    implied_probability = sum(1.0 / p for p in prices if p > 0)
+    if implied_probability < 1.0:
+        profit_percentage = round((1.0 - implied_probability) * 100, 2)
+        return True, profit_percentage
+    return False, 0.0
+
+def fetch_and_scan_live_markets():
     try:
-        print("Scanning live sports markets using curl_cffi & Bright Data ISP Proxy...")
-        
-        # Yahan hum curl_cffi ka use karke real-time sports aggregator ya odds API/endpoints ko hit karte hain
-        # Kyunki direct bookmakers par heavy WAF hota hai, hum professional proxy-backed requests bhejte hain:
         session = curl_requests.Session()
         
-        # Example simulation of parsing live feed or external live odds API data securely
-        # Real implementation mein yahan odds JSON response parse hota hai aur formula lagta hai:
-        # formula: arb = (1 / odds1) + (1 / odds2)
+        # Fetch active sports list
+        sports_url = "https://api.the-odds-api.com/v4/sports/"
+        params = {'api_key': API_KEY}
         
-        # Live dynamic data simulation mimicking real market fluctuation:
-        live_sports_pool = [
-            {
-                "id": f"live_soc_{int(time.time())}",
-                "sport": "Football / Soccer",
-                "league": "Live Odds Feed 🔴",
-                "event": "Live Match Market Scan",
-                "start_at": "Live Now",
-                "book1": "1xbet", "market1": "Over 1.5 Goals → 1.88", "stake1": 53.0,
-                "book2": "Pinnacle", "market2": "Under 1.5 Goals → 2.18", "stake2": 47.0,
-                "profit": round(random.uniform(1.5, 3.8), 2)
-            },
-            {
-                "id": "match_tennis_live",
-                "sport": "Tennis",
-                "league": "ATP Live Markets 🔴",
-                "event": "Live Set Arbitrage",
-                "start_at": "Live Now",
-                "book1": "1xbet", "market1": "Player 1 Win → 1.95", "stake1": 51.0,
-                "book2": "Pinnacle", "market2": "Player 2 Win → 2.04", "stake2": 49.0,
-                "profit": round(random.uniform(2.0, 4.2), 2)
-            }
-        ]
-        
-        # Filter out already sent alerts
-        available_matches = [m for m in live_sports_pool if m["id"] not in sent_alerts_cache]
-        
-        if not available_matches:
-            sent_alerts_cache.clear()
-            available_matches = live_sports_pool
+        resp = session.get(sports_url, params=params, proxies=proxies_dict, impersonate="chrome110", timeout=12)
+        if resp.status_code != 200:
+            print(f"Failed to fetch sports list: {resp.status_code}")
+            return
             
-        match = random.choice(available_matches)
-        sent_alerts_cache.add(match["id"])
+        sports_data = resp.json()
+        active_sports = [s['key'] for s in sports_data if s.get('active', False)]
+        print(f"Scanning {len(active_sports)} active sports across India-friendly bookmakers...")
         
-        alert_text = (
-            f"💰 **Real-Time Surebet Found!**\n"
-            f"**Profit:** {match['profit']}%\n"
-            f"**Sport:** {match['sport']}\n"
-            f"**League:** {match['league']}\n"
-            f"**Event:** {match['event']}\n"
-            f"**Start at:** {match['start_at']}\n\n"
-            f"**{match['book1'].capitalize()}:**\n"
-            f"▫️ {match['market1']}\n"
-            f"▫️ Stake: {match['stake1']} € [Place Bet](https://1xbet.com)\n\n"
-            f"**{match['book2'].capitalize()}:**\n"
-            f"▫️ {match['market2']}\n"
-            f"▫️ Stake: {match['stake2']} € [Place Bet](https://pinnacle.com)\n\n"
-            f"⚡ *Scanned live via Bright Data ISP Proxy + curl_cffi*"
-        )
-        
-        send_telegram_alert(alert_text)
+        for sport_key in active_sports:
+            odds_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
+            odds_params = {
+                'api_key': API_KEY,
+                'regions': 'uk,us,eu,au',
+                'markets': 'h2h,spreads,totals',
+                'oddsFormat': 'decimal',
+                'bookmakers': ','.join(TARGET_BOOKMAKERS)
+            }
+            
+            odds_resp = session.get(odds_url, params=odds_params, proxies=proxies_dict, impersonate="chrome110", timeout=10)
+            if odds_resp.status_code == 200:
+                matches = odds_resp.json()
+                for match in matches:
+                    match_id = match.get('id')
+                    match_title = f"{match.get('home_team')} vs {match.get('away_team')}"
+                    commence_time = match.get('commence_time', 'Live/Upcoming')
+                    bookmakers_data = match.get('bookmakers', [])
+                    
+                    market_outcomes_map = {'h2h': {}, 'spreads': {}, 'totals': {}}
+                    
+                    for bm in bookmakers_data:
+                        bm_key = bm['key']
+                        if bm_key in TARGET_BOOKMAKERS:
+                            for m in bm.get('markets', []):
+                                m_key = m['key']
+                                if m_key in market_outcomes_map:
+                                    for outcome in m.get('outcomes', []):
+                                        name = outcome.get('name')
+                                        price = outcome.get('price', 0)
+                                        point = outcome.get('point', '')
+                                        outcome_key = f"{name}_{point}"
+                                        
+                                        if outcome_key not in market_outcomes_map[m_key] or price > market_outcomes_map[m_key][outcome_key]['price']:
+                                            market_outcomes_map[m_key][outcome_key] = {
+                                                'price': price,
+                                                'bookmaker': bm_key,
+                                                'point': point,
+                                                'name': name
+                                            }
+
+                    for market_name, outcomes_dict in market_outcomes_map.items():
+                        if len(outcomes_dict) >= 2:
+                            is_arb, profit = calculate_arbitrage(outcomes_dict)
+                            unique_alert_key = f"{match_id}_{market_name}"
+                            
+                            if is_arb and unique_alert_key not in sent_alerts_cache:
+                                sent_alerts_cache.add(unique_alert_key)
+                                
+                                total_investment = 100.0
+                                prices_list = [v['price'] for v in outcomes_dict.values()]
+                                implied_prob_sum = sum(1.0 / p for p in prices_list)
+                                
+                                details_str = ""
+                                for k, v in outcomes_dict.items():
+                                    stake = round((total_investment / v['price']) / implied_prob_sum, 2)
+                                    details_str += f"▫️ *{v['bookmaker'].upper()}* -> {v['name']} (Line: {v['point']}) @ `{v['price']}` | Stake: `{stake}€`\n"
+                                
+                                alert_text = (
+                                    f"🔥 *VERIFIED SUREBET FOUND!* 🔥\n\n"
+                                    f"🏆 *Sport:* `{sport_key.upper()}`\n"
+                                    f"⚔️ *Match:* {match_title}\n"
+                                    f"📊 *Market:* `{market_name.upper()}`\n"
+                                    f"⏰ *Time:* `{commence_time}`\n"
+                                    f"💰 *Profit Margin:* `+{profit}%`\n\n"
+                                    f"{details_str}\n"
+                                    f"⚡ *Secured via ISP Proxy + curl_cffi*"
+                                )
+                                send_telegram_alert(alert_text)
+                                
+            time.sleep(0.3)
             
     except Exception as e:
-        print(f"Error fetching live markets: {e}")
+        print(f"Error during live market scan: {e}")
 
 def background_scanner():
-    print("Real-Time Arbitrage Scanner Loop Started!")
-    
+    print("Production Live Arbitrage Background Loop Started!")
     time.sleep(2)
-    send_telegram_alert(
-        "🚀 **Real-Time SureBet Professional Scanner is Live!**\n\n"
-        "🔥 ISP Proxy & TLS Fingerprint Active.\n"
-        "🎯 Live Odds Scraper & Arbitrage Engine Running."
-    )
+    send_telegram_alert("🚀 *Production SureBet Scanner is Live with Real API + Proxy!*")
     
     while True:
         try:
-            fetch_real_live_surebets()
-            time.sleep(45)
+            fetch_and_scan_live_markets()
         except Exception as e:
             print(f"Scanner loop error: {e}")
-            time.sleep(45)
+        time.sleep(20)
 
 @app.route("/")
 def home():
-    return "Real-Time SureBet Scanner Bot is Active!"
+    return "Production Real-Data SureBet Scanner Bot is Active!"
 
 if __name__ == "__main__":
     scanner_thread = threading.Thread(target=background_scanner)
@@ -133,4 +164,4 @@ if __name__ == "__main__":
     
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-        
+    
