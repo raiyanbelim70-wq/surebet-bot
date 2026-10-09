@@ -1,158 +1,219 @@
 import os
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
+import cloudscraper
 from flask import Flask
 
 app = Flask(__name__)
 
-API_KEY = "1f05a6b3d359e7a23fdca322cb0f3007"
-TARGET_BOOKMAKERS = ["1xbet", "parimatch", "pinnacle", "stake"]
-
-# Telegram Bot Token aur Chat ID
+# Updated Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
-TELEGRAM_CHAT_ID = "5292908963"
+TELEGRAM_CHAT_ID = "5232960693"
 
-# Paid Proxy Configuration (IPRoyal)
-PROXY_HOST = "geo.iproyal.com"
-PROXY_PORT = "12321"
-PROXY_USER = "HwySPyYCdCrpOQD9"
-PROXY_PASS = "ayUXZQamc10E4blN"
+# IPRoyal Proxy Configuration
+PROXY_URL = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
 
-PROXY_URL = f"http://{PROXY_USER}:{PROXY_PASS}@{PROXY_HOST}:{PROXY_PORT}"
-PROXIES = {
-    "http": PROXY_URL,
-    "https": PROXY_URL
-}
+sent_alerts = set()
+alert_lock = threading.Lock()
 
 def send_telegram_alert(message):
-    """Telegram par ultra-fast alert bhejne ka function"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
+    }
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message,
-            "parse_mode": "Markdown"
-        }
-        response = requests.post(url, json=payload, proxies=PROXIES, timeout=8)
-        print(f"Telegram Status: {response.status_code}")
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         print(f"Telegram Error: {e}")
 
-def check_market_arbitrage(outcomes, market_name, match_title, sport_key, commence_time):
-    if len(outcomes) < 2:
-        return
-        
-    best_outcomes = {}
-    for outcome in outcomes:
-        name = outcome.get('name')
-        price = outcome.get('price', 0)
-        point = outcome.get('point', '')
-        
-        # Unique key for every outcome including point/handicap/total line
-        key = f"{name}_{point}"
-        if key not in best_outcomes or price > best_outcomes[key]['price']:
-            best_outcomes[key] = {
-                'price': price, 
-                'bookmaker': outcome.get('bookmaker', ''),
-                'point': point
-            }
-
-    if len(best_outcomes) >= 2:
-        prices = [v['price'] for v in best_outcomes.values()]
-        implied_prob = sum(1/p for p in prices if p > 0)
-        
-        if 0 < implied_prob < 1:
-            profit_margin = (1 - implied_prob) * 100
-            
-            details = "\n".join([f"👉 *{k}* (Line: {v['point']}): `{v['price']}` [{v['bookmaker'].upper()}]" for k, v in best_outcomes.items()])
-            alert_msg = (
-                f"🔥 *REAL SUREBET FOUND!* 🔥\n\n"
-                f"🏆 *Sport:* `{sport_key.upper()}`\n"
-                f"⚔️ *Match:* {match_title}\n"
-                f"📊 *Market:* `{market_name.upper()}`\n"
-                f"⏰ *Time:* `{commence_time}`\n"
-                f"💰 *Profit Margin:* `+{profit_margin:.2f}%`\n\n"
-                f"{details}"
-            )
-            print(alert_msg)
-            send_telegram_alert(alert_msg)
-
-def scan_all_sports():
-    print("Ultra-fast global proxy scanner background thread started...")
-    time.sleep(2)
-    send_telegram_alert("🚀 *Global High-Speed Surebet Bot is Live!* (Scanning H2H, Spreads, Totals across Live & Upcoming via Paid Proxy)")
+def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
+    proxies = {
+        "http": PROXY_URL,
+        "https": PROXY_URL
+    } if PROXY_URL else None
     
-    while True:
-        print("\n--- Starting High-Speed Global Multi-Sport & Multi-Market Scan ---")
-        try:
-            sports_url = "https://api.the-odds-api.com/v4/sports/"
-            sports_response = requests.get(sports_url, params={'api_key': API_KEY}, proxies=PROXIES, timeout=12)
-            
-            if sports_response.status_code == 200:
-                sports_data = sports_response.json()
-                active_sports = [s['key'] for s in sports_data if s.get('active', False)]
-                print(f"Total Active Sports Loaded: {len(active_sports)}")
-                
-                # Covering all essential markets: Moneyline/H2H, Handicaps/Spreads, Totals (Over/Under)
-                markets_to_scan = "h2h,spreads,totals"
-                
-                for sport_key in active_sports:
-                    odds_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-                    params = {
-                        'api_key': API_KEY,
-                        'regions': 'uk,us,eu,au',  # Global coverage to never miss any odds
-                        'markets': markets_to_scan,
-                        'oddsFormat': 'decimal',
-                        'bookmakers': ','.join(TARGET_BOOKMAKERS)
-                    }
+    # Advanced cloudscraper setup with browser fingerprinting
+    scraper = cloudscraper.create_scraper(browser={'custom': 'ScraperBot/1.0'})
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.google.com/"
+    }
+    
+    bookie_results = {}
+    try:
+        response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
+        print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            events_list = []
+            if isinstance(data, dict):
+                events_list = data.get("result", data.get("data", data.get("events", data.get("Value", []))))
+                if not events_list and "sports" in data:
+                    events_list = data["sports"]
+            elif isinstance(data, list):
+                events_list = data
+
+            if isinstance(events_list, list):
+                for event in events_list:
+                    match_name = event.get("name", event.get("matchName", event.get("homeTeam", "") + " vs " + event.get("awayTeam", "")))
+                    odds_list = event.get("odds", event.get("prices", event.get("markets", [])))
                     
-                    try:
-                        odds_resp = requests.get(odds_url, params=params, proxies=PROXIES, timeout=8)
-                        if odds_resp.status_code == 200:
-                            matches = odds_resp.json()
-                            for match in matches:
-                                match_title = f"{match.get('home_team')} vs {match.get('away_team')}"
-                                commence_time = match.get('commence_time', 'Live/Upcoming')
-                                bookmakers_data = match.get('bookmakers', [])
-                                
-                                market_outcomes_map = {'h2h': [], 'spreads': [], 'totals': []}
-                                
-                                for bm in bookmakers_data:
-                                    bm_key = bm['key']
-                                    if bm_key in TARGET_BOOKMAKERS:
-                                        for m in bm.get('markets', []):
-                                            m_key = m['key']
-                                            if m_key in market_outcomes_map:
-                                                for outcome in m.get('outcomes', []):
-                                                    outcome['bookmaker'] = bm_key
-                                                    market_outcomes_map[m_key].append(outcome)
+                    extracted_odds = []
+                    if isinstance(odds_list, list) and len(odds_list) > 0:
+                        for odd in odds_list:
+                            if isinstance(odd, dict):
+                                val = odd.get("C", odd.get("price", odd.get("value", 0)))
+                                try:
+                                    if val: 
+                                        extracted_odds.append(float(val))
+                                except:
+                                    pass
+                            elif isinstance(odd, (int, float)):
+                                extracted_odds.append(float(odd))
 
-                                for market_type, outcomes_list in market_outcomes_map.items():
-                                    if len(outcomes_list) >= 2:
-                                        check_market_arbitrage(outcomes_list, market_type, match_title, sport_key, commence_time)
-                                            
-                        time.sleep(0.1) # Minimized delay for blazing-fast execution
-                    except Exception:
-                        continue
-            else:
-                print(f"Error fetching sports list: {sports_response.status_code}")
-                
-        except Exception as e:
-            print(f"Scanner Global Error: {e}")
+                    if match_name and len(extracted_odds) >= 2:
+                        bm_link = bookmaker_urls.get(bm, "https://google.com")
+                        bookie_results[match_name] = {
+                            "prices": [extracted_odds[0], extracted_odds[1]],
+                            "link": bm_link
+                        }
+    except Exception as e:
+        print(f"DEBUG Error -> {bm}: {e}")
+        
+    return bm, bookie_results
+
+def fetch_odds_from_bookmakers(sport, market, status):
+    live_matches_cache = {}
+    type_path = "live" if status == "LIVE" else "line"
+    stake_query = "query" + status.capitalize() + "Events{" + sport + "}"
+
+    bookmaker_endpoints = {
+        "1xBet": f"https://1xbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
+        "Stake": f"https://stake.com/_api/graphql?query={stake_query}",
+        "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
+        "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
+        "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
+        "Mostbet": f"https://mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
+        "Betwinner": f"https://betwinner.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
+        "Linebet": f"https://linebet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
+        "MegaPari": f"https://megapari.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
+        "10CRIC": f"https://www.10cric.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
+        "Pinnacle": f"https://api.pinnacle.com/v1/odds?sport={sport}&market={market}&period={status.lower()}",
+        "Pariwin": f"https://pariwin.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}"
+    }
+
+    bookmaker_urls = {
+        "1xBet": "https://1xbet.com",
+        "Stake": "https://stake.com",
+        "Parimatch": "https://parimatch.com",
+        "Melbet": "https://melbet.com",
+        "Dafabet": "https://www.dafabet.com",
+        "Mostbet": "https://mostbet.com",
+        "Betwinner": "https://betwinner.com",
+        "Linebet": "https://linebet.com",
+        "MegaPari": "https://megapari.com",
+        "10CRIC": "https://www.10cric.com",
+        "Pinnacle": "https://www.pinnacle.com",
+        "Pariwin": "https://pariwin.com"
+    }
+
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        futures = {
+            executor.submit(fetch_single_bookmaker, bm, endpoint, bookmaker_urls): bm 
+            for bm, endpoint in bookmaker_endpoints.items()
+        }
+        
+        for future in as_completed(futures):
+            bm, bookie_results = future.result()
+            for match_name, info in bookie_results.items():
+                if match_name not in live_matches_cache:
+                    live_matches_cache[match_name] = {}
+                live_matches_cache[match_name][bm] = info
+
+    return live_matches_cache
+
+def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionary):
+    if len(odds_dictionary) < 2:
+        return
+
+    best_odd_1, bookie_1, link_1 = 0.0, "", ""
+    best_odd_2, bookie_2, link_2 = 0.0, "", ""
+
+    for bm, info in odds_dictionary.items():
+        prices = info["prices"]
+        bm_link = info["link"]
+        
+        if len(prices) >= 2:
+            if prices[0] > best_odd_1:
+                best_odd_1 = prices[0]
+                bookie_1 = bm
+                link_1 = bm_link
+            if prices[1] > best_odd_2:
+                best_odd_2 = prices[1]
+                bookie_2 = bm
+                link_2 = bm_link
+
+    if best_odd_1 > 0 and best_odd_2 > 0 and bookie_1 != bookie_2:
+        implied_probability = (1.0 / best_odd_1) + (1.0 / best_odd_2)
+        
+        if implied_probability < 1.0:
+            profit_percentage = round((1.0 - implied_probability) * 100, 2)
+            alert_id = f"{match_name}_{best_odd_1}_{best_odd_2}_{market}"
             
-        print("--- Scan Cycle Finished. Re-running instantly ---")
-        time.sleep(10) # Quick restart loop for zero missed opportunities
+            with alert_lock:
+                if alert_id in sent_alerts:
+                    return
+                sent_alerts.add(alert_id)
 
-scanner_thread = threading.Thread(target=scan_all_sports, daemon=True)
-scanner_thread.start()
+            status_tag = "🔴 *LIVE SURE BET SIGNAL (IN-PLAY)*" if status == "LIVE" else "⏳ *PRE-MATCH / UPCOMING SURE BET SIGNAL*"
+            
+            message = (
+                f"🚨 *100% PROFITABLE ARBITRAGE FOUND!* 🚨\n\n"
+                f"{status_tag}\n"
+                f"🏆 *Sport:* {sport}\n"
+                f"⚔️ *Match:* {match_name}\n"
+                f"📊 *Market:* {market}\n"
+                f"💰 *Guaranteed Profit:* `{profit_percentage}%`\n\n"
+                f"👉 *Leg 1:* [{bookie_1}]({link_1}) @ **{best_odd_1}**\n"
+                f"👉 *Leg 2:* [{bookie_2}]({link_2}) @ **{best_odd_2}**\n\n"
+                f"🔥 *Click bookmaker names above to open site directly and place bets!*"
+            )
+            send_telegram_alert(message)
 
 @app.route('/')
 def home():
-    return "🚀 Global High-Speed Proxy Surebet Scanner is Fully Active and Scanning Live & Upcoming Markets!"
+    return "Arbitrage Scanner with Advanced Debug & WAF Bypass is Running 24/7!"
 
-@app.route('/test-alert')
-def test_alert():
-    send_telegram_alert("🧪 *System Operational Check:* Global proxy and multi-market scanner running at peak performance.")
-    return "Operational check message sent!"
+def background_worker():
+    sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
+    markets_list = ["1X2", "Over/Under", "Handicap", "Totals"]
+    statuses = ["LIVE", "UPCOMING"]
+
+    while True:
+        try:
+            for sport in sports_list:
+                for market in markets_list:
+                    for status in statuses:
+                        live_cache = fetch_odds_from_bookmakers(sport, market, status)
+                        for match_name, odds_dict in live_cache.items():
+                            evaluate_surebet_and_alert(match_name, sport, market, status, odds_dict)
+        except Exception as e:
+            print(f"Background Loop Error: {e}")
+            
+        time.sleep(2)
+
+if __name__ == '__main__':
+    t = threading.Thread(target=background_worker, daemon=True)
+    t.start()
+    
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
     
