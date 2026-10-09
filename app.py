@@ -40,7 +40,6 @@ def fetch_and_scan_odds():
     try:
         print("Scanning active markets via Bright Data ISP Proxy & curl_cffi...")
         
-        # Comprehensive sports data covering Live, Upcoming, all major sports & Total/Handicap/O-U markets
         sports_data = [
             {
                 "id": "match_football_live",
@@ -104,10 +103,8 @@ def fetch_and_scan_odds():
             }
         ]
         
-        # Filter out already sent alerts
         available_matches = [m for m in sports_data if m["id"] not in sent_alerts_cache]
         
-        # Reset cache if all matches have been sent
         if not available_matches:
             sent_alerts_cache.clear()
             available_matches = sports_data
@@ -139,7 +136,9 @@ def fetch_and_scan_odds():
 def background_scanner():
     print("Arbitrage Scanner Background Loop Started!")
     
-    # Startup notification on telegram
+    # 2 second ka chota delay taaki startup message turant telegram par chala jaye
+    time.sleep(2)
+    
     send_telegram_alert(
         "🚀 **SureBet Professional Scanner is Live!**\n\n"
         "🔥 ISP Proxy & TLS Fingerprint Active.\n"
