@@ -1,6 +1,10 @@
 import os
 import time
+import threading
 import requests
+from flask import Flask
+
+app = Flask(__name__)
 
 # Environment variables se credentials utha rahe hain
 PROXY_URL = os.getenv("PROXY_URL")
@@ -30,48 +34,34 @@ def send_telegram_alert(message):
     except Exception as e:
         print(f"Telegram connection error: {e}")
 
-def fetch_bookmaker_data():
-    try:
-        # Bright Data ISP Proxy ke zariye WAF bypass karte hue 1xBet aur Pinnacle ke odds fetch karne ka logic
-        print("Fetching live & upcoming odds via Bright Data ISP Proxy...")
-        
-        # Example proxy request test (Yahan tera real API/scraping endpoint aayega):
-        # response = requests.get("https://api.1xbet.com/...", proxies=proxies, timeout=10)
-        
-    except Exception as e:
-        print(f"Proxy request error: {e}")
-
-def scan_surebets():
-    # Live aur upcoming matches (Total, Handicap, Over/Under) ke liye scanning loop
-    fetch_bookmaker_data()
-    
-    # Jab surebet milegi, tab yeh alert trigger hoga:
-    # surebet_found = False
-    # if surebet_found:
-    #     alert_text = (
-    #         "🚨 **SureBet Alert Found!** 🚨\n\n"
-    #         "⚽ **Match:** Team A vs Team B (Live / Upcoming)\n"
-    #         "📊 **Market:** Total / Handicap / Over-Under\n"
-    #         "🔥 **Bookmakers:** 1xBet vs Pinnacle\n"
-    #         "💰 **Profit Margin:** +2.5%\n"
-    #         "⚡ *Scanned via Bright Data ISP Proxy*"
-    #     )
-    #     send_telegram_alert(alert_text)
-
-if __name__ == "__main__":
-    print("Arbitrage Scanner Booted Successfully with ISP Proxy!")
+def background_scanner():
+    print("Arbitrage Scanner Background Loop Started!")
     send_telegram_alert(
         "🚀 **High-Speed Arbitrage Scanner Started!**\n\n"
         "🔥 ISP Proxy (Bright Data) Connected.\n"
         "🎯 WAF & Geo-blocks (403/451) Bypassed.\n"
         "⚡ Scanning Live & Upcoming matches (Total, Handicap, O/U)..."
     )
-    
     while True:
         try:
-            scan_surebets()
-            time.sleep(5)  # Super fast scanning interval
+            # Yahan Bright Data ISP Proxy ke zariye odds fetch aur scan karne ka logic chalega
+            print("Fetching live & upcoming odds via Bright Data ISP Proxy...")
+            time.sleep(15)
         except Exception as e:
-            print(f"Error in main loop: {e}")
+            print(f"Scanner loop error: {e}")
             time.sleep(10)
-            
+
+@app.route("/")
+def home():
+    return "Arbitrage Scanner Bot is Running Successfully!"
+
+if __name__ == "__main__":
+    # Scanner ko background thread mein daal rahe hain taaki web server block na ho
+    scanner_thread = threading.Thread(target=background_scanner)
+    scanner_thread.daemon = True
+    scanner_thread.start()
+    
+    # Render ke liye Flask app ko port par run kar rahe hain
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+    
