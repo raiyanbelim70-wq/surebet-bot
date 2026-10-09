@@ -37,7 +37,6 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
         "https": PROXY_URL
     } if PROXY_URL else None
     
-    # Advanced cloudscraper setup with browser fingerprinting
     scraper = cloudscraper.create_scraper(browser={'custom': 'ScraperBot/1.0'})
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
@@ -101,7 +100,7 @@ def fetch_odds_from_bookmakers(sport, market, status):
         "Parimatch": f"https://parimatch.com/api/v4/{type_path}/events?sport={sport}&market={market}",
         "Melbet": f"https://melbet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Dafabet": f"https://www.dafabet.com/api/sports/odds?sport={sport}&market={market}&type={status.lower()}",
-        "Mostbet": f"https://mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
+        "Mostbet": f"mostbet.com/api/v1/line/events?sport={sport}&market={market}&isLive={'true' if status=='LIVE' else 'false'}",
         "Betwinner": f"https://betwinner.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "Linebet": f"https://linebet.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
         "MegaPari": f"https://megapari.com/service-api/{type_path}/getEvents?sport={sport}&market={market}",
@@ -190,7 +189,7 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Arbitrage Scanner with Advanced Debug & WAF Bypass is Running 24/7!"
+    return "Arbitrage Scanner with Gunicorn Worker Fix is Running 24/7!"
 
 def background_worker():
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
@@ -210,10 +209,11 @@ def background_worker():
             
         time.sleep(2)
 
+# Start background worker immediately on import so Gunicorn runs it automatically
+t = threading.Thread(target=background_worker, daemon=True)
+t.start()
+
 if __name__ == '__main__':
-    t = threading.Thread(target=background_worker, daemon=True)
-    t.start()
-    
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
     
