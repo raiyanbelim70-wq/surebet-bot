@@ -17,7 +17,6 @@ proxies_dict = {
     "https": PROXY_URL
 }
 
-# India-accessible bookmakers target list
 TARGET_BOOKMAKERS = ["1xbet", "parimatch", "pinnacle", "stake"]
 sent_alerts_cache = set()
 
@@ -53,8 +52,6 @@ def fetch_and_scan_live_markets():
     print("-> Background scan cycle started...", flush=True)
     try:
         session = curl_requests.Session()
-        
-        # Fetch active sports list
         sports_url = "https://api.the-odds-api.com/v4/sports/"
         params = {'api_key': API_KEY}
         
@@ -133,9 +130,45 @@ def fetch_and_scan_live_markets():
                                     details_str += f"▫️ *{v['bookmaker'].upper()}* -> {v['name']} (Line: {v['point']}) @ `{v['price']}` | Stake: `{stake}€`\n"
                                 
                                 alert_text = (
-                                    f"🔥 *VERIFIED SUREBET FOUND!* 🔥\n\n"
-                                    f"🏆 *Sport:* `{sport_key.upper()}`\n"
+                                    "🔥 *VERIFIED SUREBET FOUND!* 🔥\n\n"
+                                    f"🏆 *Sport:* {sport_key.upper()}\n"
                                     f"⚔️ *Match:* {match_title}\n"
-                                    f"📊 *Market:* `{market_name.upper()}`\n"
-                                    f"⏰ *Time:* `{commence_time}`\n"
+                                    f"📊 *Market:* {market_name.upper()}\n"
+                                    f"⏰ *Time:* {commence_time}\n"
+                                    f"💰 *Profit Margin:* +{profit}%\n\n"
+                                    f"{details_str}\n"
+                                    f"⚡ *Secured via ISP Proxy + curl_cffi*"
+                                )
+                                send_telegram_alert(alert_text)
                                 
+            time.sleep(0.3)
+            
+        print("Scan cycle completed successfully.", flush=True)
+    except Exception as e:
+        print(f"CRITICAL ERROR during live market scan: {e}", flush=True)
+
+def background_scanner():
+    print("Background thread function initialized!", flush=True)
+    time.sleep(2)
+    send_telegram_alert("🚀 *Production SureBet Scanner is Live with Real API + Proxy!*")
+    
+    while True:
+        try:
+            fetch_and_scan_live_markets()
+        except Exception as e:
+            print(f"Scanner loop crash error: {e}", flush=True)
+        print("Sleeping for 20 seconds before next scan...", flush=True)
+        time.sleep(20)
+
+@app.route("/")
+def home():
+    return "Production Real-Data SureBet Scanner Bot is Active!"
+
+if __name__ == "__main__":
+    scanner_thread = threading.Thread(target=background_scanner)
+    scanner_thread.daemon = True
+    scanner_thread.start()
+    
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+    
