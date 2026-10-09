@@ -2,7 +2,7 @@ import os
 import time
 import requests
 
-# Environment variables से credentials उठा रहे हैं
+# Environment variables se credentials utha rahe hain
 PROXY_URL = os.getenv("PROXY_URL")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -32,37 +32,36 @@ def send_telegram_alert(message):
 
 def fetch_bookmaker_data():
     try:
-        # Example request routing through Bright Data ISP Proxy to bypass WAF/Geo-blocking
-        # 1xBet ya Pinnacle ke endpoints par request bhejte waqt proxies=proxies use hoga
-        print("Fetching odds via Bright Data ISP Proxy...")
+        # Bright Data ISP Proxy ke zariye WAF bypass karte hue 1xBet aur Pinnacle ke odds fetch karne ka logic
+        print("Fetching live & upcoming odds via Bright Data ISP Proxy...")
         
-        # Test request (Ye tere bookmaker API / scraping URL se replace hoga)
+        # Example proxy request test (Yahan tera real API/scraping endpoint aayega):
         # response = requests.get("https://api.1xbet.com/...", proxies=proxies, timeout=10)
         
     except Exception as e:
         print(f"Proxy request error: {e}")
 
 def scan_surebets():
-    # Yahan live aur upcoming matches (Total, Handicap, Over/Under) ka logic chalega
+    # Live aur upcoming matches (Total, Handicap, Over/Under) ke liye scanning loop
     fetch_bookmaker_data()
     
-    # Sample logic for surebet alert test:
+    # Jab surebet milegi, tab yeh alert trigger hoga:
     # surebet_found = False
     # if surebet_found:
     #     alert_text = (
     #         "🚨 **SureBet Alert Found!** 🚨\n\n"
-    #         "⚽ **Match:** Team A vs Team B\n"
+    #         "⚽ **Match:** Team A vs Team B (Live / Upcoming)\n"
     #         "📊 **Market:** Total / Handicap / Over-Under\n"
     #         "🔥 **Bookmakers:** 1xBet vs Pinnacle\n"
-    #         "💰 **Profit:** +2.5%\n"
-    #         "⚡ *Bypassed via ISP Proxy*"
+    #         "💰 **Profit Margin:** +2.5%\n"
+    #         "⚡ *Scanned via Bright Data ISP Proxy*"
     #     )
     #     send_telegram_alert(alert_text)
 
 if __name__ == "__main__":
     print("Arbitrage Scanner Booted Successfully with ISP Proxy!")
     send_telegram_alert(
-        "🚀 **Arbitrage Scanner Started Successfully!**\n\n"
+        "🚀 **High-Speed Arbitrage Scanner Started!**\n\n"
         "🔥 ISP Proxy (Bright Data) Connected.\n"
         "🎯 WAF & Geo-blocks (403/451) Bypassed.\n"
         "⚡ Scanning Live & Upcoming matches (Total, Handicap, O/U)..."
