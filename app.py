@@ -8,9 +8,11 @@ from flask import Flask
 
 app = Flask(__name__)
 
+# Telegram Configuration
 TELEGRAM_BOT_TOKEN = "8001955184:AAH_k7XKzU6aJhg8MoAeECsra06SYqEJZFs"
 TELEGRAM_CHAT_ID = "5232960693"
 
+# IPRoyal Proxy Configuration (Cleaned with .strip() to remove trailing newlines/spaces)
 raw_proxy = os.environ.get("PROXY_URL", "http://HwySPyYCdCrpOQD9:ayUXZQamc10E4blN@geo.iproyal.com:12321")
 PROXY_URL = raw_proxy.strip() if raw_proxy else None
 
@@ -36,26 +38,25 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
         "https": PROXY_URL
     } if PROXY_URL else None
     
-    scraper = cloudscraper.create_scraper(browser={'custom': 'ScraperBot/1.0'})
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.google.com/"
-    }
-    
     bookie_results = {}
     try:
-        # Added verify=False to bypass SSL cert issues
-        response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6, verify=False)
+        # Isolated scraper instance per bookmaker to prevent cross-contamination
+        scraper = cloudscraper.create_scraper(browser={'custom': 'ScraperBot/1.0'})
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://www.google.com/"
+        }
+        
+        response = scraper.get(endpoint, proxies=proxies, headers=headers, timeout=6)
         print(f"DEBUG -> Bookmaker: {bm} | Status Code: {response.status_code}", flush=True)
         
         if response.status_code == 200:
-            # Check if response is actually JSON before parsing
             try:
                 data = response.json()
             except Exception:
-                print(f"DEBUG Error -> {bm}: Response is not valid JSON (Cloudflare Block)", flush=True)
+                print(f"DEBUG Error -> {bm}: Blocked by Cloudflare (HTML response instead of JSON)", flush=True)
                 return bm, bookie_results
 
             events_list = []
@@ -90,8 +91,12 @@ def fetch_single_bookmaker(bm, endpoint, bookmaker_urls):
                             "prices": [extracted_odds[0], extracted_odds[1]],
                             "link": bm_link
                         }
+        else:
+            print(f"DEBUG Error -> {bm}: HTTP Status {response.status_code}", flush=True)
+            
     except Exception as e:
-        print(f"DEBUG Error -> {bm}: {e}", flush=True)
+        # Safely catch SSL, proxy timeout, or connection errors without crashing the thread pool
+        print(f"DEBUG Error -> {bm}: {str(e)}", flush=True)
         
     return bm, bookie_results
 
@@ -137,11 +142,14 @@ def fetch_odds_from_bookmakers(sport, market, status):
         }
         
         for future in as_completed(futures):
-            bm, bookie_results = future.result()
-            for match_name, info in bookie_results.items():
-                if match_name not in live_matches_cache:
-                    live_matches_cache[match_name] = {}
-                live_matches_cache[match_name][bm] = info
+            try:
+                bm, bookie_results = future.result()
+                for match_name, info in bookie_results.items():
+                    if match_name not in live_matches_cache:
+                        live_matches_cache[match_name] = {}
+                    live_matches_cache[match_name][bm] = info
+            except Exception as e:
+                print(f"ThreadPool Future Error: {e}", flush=True)
 
     return live_matches_cache
 
@@ -195,14 +203,14 @@ def evaluate_surebet_and_alert(match_name, sport, market, status, odds_dictionar
 
 @app.route('/')
 def home():
-    return "Arbitrage Scanner with SSL & JSON Error Fix is Running 24/7!"
+    return "Bulletproof Arbitrage Scanner is Running 24/7!"
 
 def background_worker():
     sports_list = ["Cricket", "Football", "Soccer", "Tennis", "Basketball", "Hockey"]
     markets_list = ["1X2", "Over/Under", "Handicap", "Totals"]
     statuses = ["LIVE", "UPCOMING"]
 
-    print("Background worker thread started successfully!", flush=True)
+    print("Background worker thread started successfully and running stable!", flush=True)
 
     while True:
         try:
@@ -215,8 +223,9 @@ def background_worker():
         except Exception as e:
             print(f"Background Loop Error: {e}", flush=True)
             
-        time.sleep(2)
+        time.sleep(3)
 
+# Start background worker immediately for Gunicorn compatibility
 t = threading.Thread(target=background_worker, daemon=True)
 t.start()
 
