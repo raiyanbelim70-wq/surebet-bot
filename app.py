@@ -23,7 +23,7 @@ sent_alerts_cache = set()
 
 def send_telegram_alert(message):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram tokens missing!")
+        print("Telegram tokens missing!", flush=True)
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -34,9 +34,9 @@ def send_telegram_alert(message):
     try:
         response = requests.post(url, json=payload, timeout=8)
         if response.status_code != 200:
-            print(f"Telegram error response: {response.text}")
+            print(f"Telegram error response: {response.text}", flush=True)
     except Exception as e:
-        print(f"Telegram connection error: {e}")
+        print(f"Telegram connection error: {e}", flush=True)
 
 def calculate_arbitrage(outcomes_dict):
     prices = [v['price'] for v in outcomes_dict.values()]
@@ -50,6 +50,7 @@ def calculate_arbitrage(outcomes_dict):
     return False, 0.0
 
 def fetch_and_scan_live_markets():
+    print("-> Background scan cycle started...", flush=True)
     try:
         session = curl_requests.Session()
         
@@ -57,16 +58,20 @@ def fetch_and_scan_live_markets():
         sports_url = "https://api.the-odds-api.com/v4/sports/"
         params = {'api_key': API_KEY}
         
+        print("Fetching sports list from API...", flush=True)
         resp = session.get(sports_url, params=params, proxies=proxies_dict, impersonate="chrome110", timeout=12)
+        print(f"Sports API Response Code: {resp.status_code}", flush=True)
+        
         if resp.status_code != 200:
-            print(f"Failed to fetch sports list: {resp.status_code}")
+            print(f"Failed to fetch sports list: {resp.text}", flush=True)
             return
             
         sports_data = resp.json()
         active_sports = [s['key'] for s in sports_data if s.get('active', False)]
-        print(f"Scanning {len(active_sports)} active sports across India-friendly bookmakers...")
+        print(f"Scanning {len(active_sports)} active sports across India-friendly bookmakers...", flush=True)
         
         for sport_key in active_sports:
+            print(f"Checking odds for sport: {sport_key}", flush=True)
             odds_url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
             odds_params = {
                 'api_key': API_KEY,
@@ -77,8 +82,11 @@ def fetch_and_scan_live_markets():
             }
             
             odds_resp = session.get(odds_url, params=odds_params, proxies=proxies_dict, impersonate="chrome110", timeout=10)
+            print(f"Odds API Response for {sport_key}: {odds_resp.status_code}", flush=True)
+            
             if odds_resp.status_code == 200:
                 matches = odds_resp.json()
+                print(f"Found {len(matches)} matches for {sport_key}", flush=True)
                 for match in matches:
                     match_id = match.get('id')
                     match_title = f"{match.get('home_team')} vs {match.get('away_team')}"
@@ -130,38 +138,4 @@ def fetch_and_scan_live_markets():
                                     f"⚔️ *Match:* {match_title}\n"
                                     f"📊 *Market:* `{market_name.upper()}`\n"
                                     f"⏰ *Time:* `{commence_time}`\n"
-                                    f"💰 *Profit Margin:* `+{profit}%`\n\n"
-                                    f"{details_str}\n"
-                                    f"⚡ *Secured via ISP Proxy + curl_cffi*"
-                                )
-                                send_telegram_alert(alert_text)
                                 
-            time.sleep(0.3)
-            
-    except Exception as e:
-        print(f"Error during live market scan: {e}")
-
-def background_scanner():
-    print("Production Live Arbitrage Background Loop Started!")
-    time.sleep(2)
-    send_telegram_alert("🚀 *Production SureBet Scanner is Live with Real API + Proxy!*")
-    
-    while True:
-        try:
-            fetch_and_scan_live_markets()
-        except Exception as e:
-            print(f"Scanner loop error: {e}")
-        time.sleep(20)
-
-@app.route("/")
-def home():
-    return "Production Real-Data SureBet Scanner Bot is Active!"
-
-if __name__ == "__main__":
-    scanner_thread = threading.Thread(target=background_scanner)
-    scanner_thread.daemon = True
-    scanner_thread.start()
-    
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
-    
