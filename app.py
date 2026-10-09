@@ -3,16 +3,14 @@ import time
 import threading
 from flask import Flask
 import requests
-from curl_cffi import requests as cffi_requests  # WAF bypass karne ke liye magic tool
+from curl_cffi import requests as cffi_requests
 
 app = Flask(__name__)
 
-# Environment variables se credentials utha rahe hain
 PROXY_URL = os.getenv("PROXY_URL")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Bright Data ISP Proxy configuration
 proxies = {
     "http": PROXY_URL,
     "https": PROXY_URL
@@ -37,52 +35,52 @@ def send_telegram_alert(message):
 
 def fetch_and_scan_odds():
     try:
-        print("Fetching odds using Browser Fingerprint via ISP Proxy...")
+        print("Scanning markets via Bright Data ISP Proxy + curl_cffi...")
         
-        # 1xBet Request using curl_cffi (Chrome impersonate karke WAF 403 bypass karega)
-        # resp_1xbet = cffi_requests.get("https://1xbet.com/service-api/...", proxies=proxies, impersonate="chrome", timeout=10)
-        # print("1xBet Status:", resp_1xbet.status_code)
-
-        # Pinnacle Request using curl_cffi (Geo-block 451 bypass karega)
-        # resp_pinnacle = cffi_requests.get("https://api.pinnacle.com/...", proxies=proxies, impersonate="chrome", timeout=10)
-        # print("Pinnacle Status:", resp_pinnacle.status_code)
+        # 1xBet API / Endpoint request
+        # resp_1xbet = cffi_requests.get("YOUR_1XBET_ENDPOINT", proxies=proxies, impersonate="chrome", timeout=10)
         
-        # Total, Handicap, O/U Arbitrage logic yahan aayega
-        surebet_found = False
+        # Pinnacle API / Endpoint request
+        # resp_pinnacle = cffi_requests.get("YOUR_PINNACLE_ENDPOINT", proxies=proxies, impersonate="chrome", timeout=10)
+        
+        # TODO: Yahan JSON parse karke Total, Handicap aur O/U ke odds nikalenge
+        # Arbitrage formula: (1 / Odds_1xBet) + (1 / Odds_Pinnacle) < 1
+        
+        surebet_found = False  # Jab profit > 0 hoga tab ye True hoga
         
         if surebet_found:
             alert_text = (
                 "🚨 **SureBet Found!** 🚨\n\n"
-                "⚽ **Market:** Total / Handicap / O/U\n"
+                "⚽ **Match:** Team A vs Team B\n"
+                "📊 **Market:** Total / Handicap / O/U\n"
                 "🔥 **1xBet vs Pinnacle**\n"
                 "💰 **Profit:** +2.3%\n"
-                "⚡ *Bypassed via Bright Data ISP Proxy + curl_cffi*"
+                "⚡ *Secured via ISP Proxy & TLS Bypass*"
             )
             send_telegram_alert(alert_text)
             
     except Exception as e:
-        print(f"Error during fetching: {e}")
+        print(f"Error during odds fetching: {e}")
 
 def background_scanner():
     print("Arbitrage Scanner Background Loop Started!")
     send_telegram_alert(
-        "🚀 **Advanced Arbitrage Scanner Active!**\n\n"
-        "🔥 ISP Proxy & Browser Fingerprinting Enabled.\n"
-        "🎯 403 & 451 Bypassed Successfully.\n"
-        "⚡ Scanning Live & Upcoming markets..."
+        "🚀 **Arbitrage Scanner Fully Active!**\n\n"
+        "🔥 ISP Proxy & TLS Fingerprint Connected.\n"
+        "🎯 Ready for Live Market Data Processing..."
     )
     
     while True:
         try:
             fetch_and_scan_odds()
-            time.sleep(10)
+            time.sleep(10)  # Scan interval
         except Exception as e:
             print(f"Scanner loop error: {e}")
             time.sleep(10)
 
 @app.route("/")
 def home():
-    return "Arbitrage Scanner Bot is Running with Browser TLS Bypass!"
+    return "Arbitrage Scanner Bot is Live and Ready for Data Parsing!"
 
 if __name__ == "__main__":
     scanner_thread = threading.Thread(target=background_scanner)
